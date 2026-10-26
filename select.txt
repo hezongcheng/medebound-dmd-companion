@@ -1,0 +1,55 @@
+1. 总操作次数最多的用户（全部行为）
+
+
+SELECT u.id, u.username, u.email, COUNT(*) AS total_ops
+FROM user_operation_logs l
+LEFT JOIN users u ON u.id = l.user_id
+GROUP BY l.user_id
+ORDER BY total_ops DESC
+LIMIT 20;
+2. AI 使用次数最多（解读 + 对话合并）
+
+
+SELECT u.id, u.username, u.email,
+  SUM(l.action = 'ai_analyze') AS analyze_count,
+  SUM(l.action = 'ai_chat')    AS chat_count,
+  COUNT(*)                      AS total_ai_ops
+FROM user_operation_logs l
+LEFT JOIN users u ON u.id = l.user_id
+WHERE l.action IN ('ai_analyze', 'ai_chat')
+GROUP BY l.user_id
+ORDER BY total_ai_ops DESC
+LIMIT 20;
+3. 按行为类型分列统计（一行看全貌）
+
+
+SELECT u.id, u.username, u.email,
+  SUM(l.action = 'login')        AS login_count,
+  SUM(l.action = 'ai_analyze')   AS analyze_count,
+  SUM(l.action = 'ai_chat')      AS chat_count,
+  SUM(l.action = 'rehab_checkin') AS checkin_count,
+  COUNT(*)                        AS total
+FROM user_operation_logs l
+LEFT JOIN users u ON u.id = l.user_id
+GROUP BY l.user_id
+ORDER BY total DESC
+LIMIT 20;
+4. 某段时间内最活跃的用户
+
+
+SELECT u.id, u.username, COUNT(*) AS total_ops
+FROM user_operation_logs l
+LEFT JOIN users u ON u.id = l.user_id
+WHERE l.created_at >= '2026-03-01' AND l.created_at < '2026-04-01'
+GROUP BY l.user_id
+ORDER BY total_ops DESC
+LIMIT 20;
+5. 某篇文献/药物/试验被解读最多次
+
+
+SELECT content_type, content_id, content_title, COUNT(*) AS analyze_count
+FROM user_operation_logs
+WHERE action = 'ai_analyze'
+GROUP BY content_type, content_id, content_title
+ORDER BY analyze_count DESC
+LIMIT 20;

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>罕知-DMD Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Noto Sans SC"', 'sans-serif'],
+            },
+            colors: {
+              brand: {
+                50: '#f0fdfa',
+                100: '#ccfbf1',
+                200: '#99f6e4',
+                300: '#5eead4',
+                400: '#2dd4bf',
+                500: '#14b8a6',
+                600: '#0d9488',
+                700: '#0f766e',
+                800: '#115e59',
+                900: '#134e4a',
+              }
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+      html {
+        /* 固定滚动条占位，避免页面切换时头部导航横向抖动 */
+        scrollbar-gutter: stable;
+      }
+      body {
+        background-color: #f8fafc;
+        overflow-y: scroll;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+      .browser-warning {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #f8fafc;
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        padding: 20px;
+        text-align: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      .browser-warning.show {
+        display: flex;
+      }
+      .browser-warning h2 {
+        color: #0f766e;
+        font-size: 24px;
+        margin-bottom: 16px;
+      }
+      .browser-warning p {
+        color: #666;
+        font-size: 16px;
+        line-height: 1.6;
+        max-width: 400px;
+      }
+      .browser-warning .icon {
+        font-size: 48px;
+        margin-bottom: 20px;
+      }
+    </style>
+    <script>
+      (function() {
+        function checkBrowserSupport() {
+          try {
+            if (typeof window === 'undefined') return true;
+            if (typeof Symbol === 'undefined') return false;
+            if (typeof Promise === 'undefined') return false;
+            if (typeof Object.assign === 'undefined') return false;
+            if (typeof Array.from === 'undefined') return false;
+            if (typeof fetch === 'undefined') return false;
+            var testObj = {};
+            if (typeof Object.hasOwn !== 'function') {
+              Object.hasOwn = function(obj, prop) {
+                return Object.prototype.hasOwnProperty.call(obj, prop);
+              };
+            }
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+        if (!checkBrowserSupport()) {
+          document.addEventListener('DOMContentLoaded', function() {
+            var warning = document.getElementById('browser-warning');
+            if (warning) warning.classList.add('show');
+            var root = document.getElementById('root');
+            if (root) root.style.display = 'none';
+          });
+        }
+      })();
+    </script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+        "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+        "@google/genai": "https://esm.sh/@google/genai@^1.33.0"
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <div id="browser-warning" class="browser-warning">
+      <div class="icon">⚠️</div>
+      <h2>浏览器版本过低</h2>
+      <p>您的浏览器版本过低，无法正常使用本应用。请升级到最新版本的 Chrome、Safari、Edge 或 Firefox 浏览器，或在微信中打开。</p>
+    </div>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 20px; text-align: center; font-family: sans-serif;">
+        <h2 style="color: #0f766e;">请启用 JavaScript</h2>
+        <p style="color: #666;">本应用需要 JavaScript 支持才能正常运行。请在浏览器设置中启用 JavaScript。</p>
+      </div>
+    </noscript>
+    <script type="module" src="/index.tsx"></script>
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        console.error('JavaScript Error:', msg, url, lineNo, columnNo, error);
+        if (msg && (msg.indexOf('importmap') !== -1 || msg.indexOf('module') !== -1 || msg.indexOf('import') !== -1)) {
+          var warning = document.getElementById('browser-warning');
+          if (warning) warning.classList.add('show');
+          var root = document.getElementById('root');
+          if (root) root.innerHTML = '';
+        }
+        return false;
+      };
+    </script>
+  </body>
+</html>
