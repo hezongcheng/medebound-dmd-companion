@@ -98,10 +98,9 @@ export const RehabSection: React.FC<Props> = ({ userData, onUpdate }) => {
 
   const videosByGroup = useMemo(() => {
     return allVideos.reduce<Record<string, RehabVideoItem[]>>((acc, video) => {
-      for (const key of video.video_groups) {
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(video);
-      }
+      const key = video.video_group || 'unknown';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(video);
       return acc;
     }, {});
   }, [allVideos]);
@@ -1215,7 +1214,9 @@ export const RehabSection: React.FC<Props> = ({ userData, onUpdate }) => {
                             {levelVideos.map(video => (
                               <li key={video.id} className="flex min-h-[72px] items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-5 shadow-sm sm:px-5">
                                 <span className={`min-w-0 break-words text-base font-bold leading-relaxed sm:text-lg ${isUnlocked ? 'text-[#102b42]' : 'text-gray-500'}`}>{translateText(video.title)}</span>
-                                <span aria-label={translateText(`等级 ${level.id}.0`)} className="shrink-0 rounded-lg bg-[#e8faf7] px-2 py-1 text-sm font-bold text-[#269f99]">{translateText(level.id)}.0</span>
+                                {video.video_version && (
+                                  <span aria-label={translateText(`视频版本 ${video.video_version}`)} className="shrink-0 rounded-lg bg-[#e8faf7] px-2 py-1 text-sm font-bold text-[#269f99]">{video.video_version}</span>
+                                )}
                               </li>
                             ))}
                           </ul>

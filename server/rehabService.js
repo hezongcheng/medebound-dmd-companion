@@ -60,14 +60,8 @@ async function markLevel3Unlocked(userId) {
  * 可按行动状态过滤
  */
 async function getRehabVideos(targetStatus = null, videoGroup = null) {
-  // 标签独立配置，不根据等级大小推导或累加视频。
-  let sql = `SELECT v.*, tags.video_groups_csv
-    FROM rehab_videos v
-    LEFT JOIN (
-      SELECT video_id, GROUP_CONCAT(video_group ORDER BY video_group) AS video_groups_csv
-      FROM rehab_video_levels GROUP BY video_id
-    ) tags ON tags.video_id = v.id
-    WHERE v.is_active = 1`;
+  // video_version 是独立的视频版本，video_group 仅用于训练分组。
+  let sql = 'SELECT v.* FROM rehab_videos v WHERE v.is_active = 1';
   const params = [];
 
   if (targetStatus && targetStatus !== 'all') {
@@ -76,18 +70,14 @@ async function getRehabVideos(targetStatus = null, videoGroup = null) {
   }
 
   if (videoGroup) {
-    sql += ` AND EXISTS (SELECT 1 FROM rehab_video_levels membership
-      WHERE membership.video_id = v.id AND membership.video_group = ?)`;
+    sql += ' AND v.video_group = ?';
     params.push(videoGroup);
   }
 
   sql += ' ORDER BY v.sort_order ASC, v.id ASC';
   const [rows] = await pool.execute(sql, params);
 
-  return rows.map(({ video_groups_csv, ...video }) => ({
-    ...video,
-    video_groups: video_groups_csv ? video_groups_csv.split(',') : []
-  }));
+  return rows;
 }
 
 /**

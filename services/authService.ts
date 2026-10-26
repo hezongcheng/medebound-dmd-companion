@@ -223,7 +223,7 @@ export interface RehabVideoItem {
   thumbnail_url: string;
   duration: number;
   video_group: string | null;
-  video_groups: string[];
+  video_version: string | null;
   category: string;
   difficulty: string;
   target_status: string;
@@ -236,7 +236,6 @@ export const getRehabVideos = async (videoGroup?: string): Promise<RehabVideoIte
   if (!result) return [];
   return result.map(v => ({
     ...v,
-    video_groups: Array.isArray(v.video_groups) ? v.video_groups : [],
     exercises: typeof v.exercises === 'string' ? JSON.parse(v.exercises) : (v.exercises || [])
   }));
 };
