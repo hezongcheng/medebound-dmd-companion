@@ -17,17 +17,18 @@ function loadService(execute) {
   return context.module.exports;
 }
 
-test('list exposes explicit multi-level tags and preserves untagged videos without legacy fallback', async () => {
+test('videos in the same training group retain independent database versions, including unset versions', async () => {
   const service = loadService(async () => [[
-    { id: 1, video_group: 'level1', video_groups_csv: 'level1,level3' },
-    { id: 2, video_group: 'level2', video_groups_csv: null }
+    { id: 1, video_group: 'level1', video_version: '3.0' },
+    { id: 2, video_group: 'level1', video_version: '1.0' },
+    { id: 3, video_group: 'level3', video_version: '2.0' },
+    { id: 4, video_group: 'level2', video_version: null }
   ]]);
   const videos = JSON.parse(JSON.stringify(await service.getRehabVideos()));
-  assert.deepEqual(videos.map(v => v.video_groups), [['level1', 'level3'], []]);
-  assert.equal('video_groups_csv' in videos[0], false);
+  assert.deepEqual(videos.map(v => v.video_version), ['3.0', '1.0', '2.0', null]);
 });
 
-test('each level filter uses exact membership and parameterized status, without cumulative selection', async () => {
+test('training group filter remains exact and independent of video version', async () => {
   const calls = [];
   const service = loadService(async (sql, params) => {
     calls.push({ sql, params: Array.from(params) });
@@ -39,25 +40,24 @@ test('each level filter uses exact membership and parameterized status, without 
     assert.deepEqual(params, ['ambulatory', group]);
     assert.match(sql, /v\.is_active = 1/);
     assert.match(sql, /v\.target_status = \? OR v\.target_status = "all"/);
-    assert.match(sql, /membership\.video_id = v\.id AND membership\.video_group = \?/);
+    assert.match(sql, /AND v\.video_group = \?/);
+    assert.doesNotMatch(sql, /rehab_video_levels|video_version\s*=/);
     assert.doesNotMatch(sql, /(?:video_group\s*(?:<=|<)|video_group\s+IN)/i);
     assert.match(sql, /ORDER BY v\.sort_order ASC, v\.id ASC/);
   }
 });
 
-test('database edits appear on the next fetch rather than a cached tag result', async () => {
-  let tags = 'level2';
-  const service = loadService(async () => [[{ id: 1, video_groups_csv: tags }]]);
-  assert.equal((await service.getRehabVideos())[0].video_groups.join(','), 'level2');
-  tags = 'level1,level3';
-  assert.equal((await service.getRehabVideos())[0].video_groups.join(','), 'level1,level3');
+test('database version edits appear on the next fetch', async () => {
+  let version = '2.0';
+  const service = loadService(async () => [[{ id: 1, video_group: 'level1', video_version: version }]]);
+  assert.equal((await service.getRehabVideos())[0].video_version, '2.0');
+  version = '3.0';
+  assert.equal((await service.getRehabVideos())[0].video_version, '3.0');
 });
 
-test('migration seeds exact legacy groups once and defines unique memberships with matching video ID type', () => {
-  const sql = fs.readFileSync(path.join(__dirname, '../database/20261026_rehab_video_levels.sql'), 'utf8');
-  assert.match(sql, /video_id bigint NOT NULL/);
-  assert.match(sql, /PRIMARY KEY \(video_id, video_group\)/);
-  assert.match(sql, /SELECT id, video_group FROM rehab_videos/);
-  assert.match(sql, /AND NOT EXISTS\s*\(\s*SELECT 1 FROM schema_migrations WHERE id = '20261026_rehab_video_levels_v1'/);
-  assert.match(sql, /REFERENCES rehab_videos \(id\) ON DELETE CASCADE/);
+test('migration adds a separate nullable version field without inferring historical versions', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '../database/20261026_rehab_video_version.sql'), 'utf8');
+  assert.match(sql, /video_version VARCHAR\(20\) NULL DEFAULT NULL/);
+  assert.match(sql, /information_schema.columns/);
+  assert.doesNotMatch(sql, /UPDATE rehab_videos|INSERT INTO rehab_video_levels/);
 });

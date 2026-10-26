@@ -576,12 +576,8 @@ async function runMigrations() {
       preferred_locale VARCHAR(16) NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
-    const rehabLevelsSql = require('fs').readFileSync(
-      require('path').join(__dirname, '../database/20261026_rehab_video_levels.sql'), 'utf8'
-    );
-    for (const statement of rehabLevelsSql.split(';').map(sql => sql.trim()).filter(Boolean)) {
-      await connection.query(statement);
-    }
+    await ensureColumn(connection, 'rehab_videos', 'video_version',
+      "ALTER TABLE rehab_videos ADD COLUMN video_version VARCHAR(20) NULL DEFAULT NULL COMMENT '视频版本，独立于训练等级，例如1.0/2.0/3.0' AFTER video_group");
   } finally {
     connection.release();
   }
