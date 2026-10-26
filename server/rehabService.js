@@ -3,9 +3,7 @@
  */
 
 const { pool } = require('./db');
-const REHAB_VIDEO_CACHE_TTL_MS = 5 * 60 * 1000;
 const LEVEL_UNLOCK_DAYS = 5;
-const rehabVideosCache = new Map();
 
 function getLocalDateString(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -62,34 +60,34 @@ async function markLevel3Unlocked(userId) {
  * 可按行动状态过滤
  */
 async function getRehabVideos(targetStatus = null, videoGroup = null) {
-  const cacheKey = `${targetStatus || 'all'}:${videoGroup || 'all'}`;
-  const cached = rehabVideosCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
-  }
-
-  let sql = 'SELECT * FROM rehab_videos WHERE is_active = 1';
+  // 标签独立配置，不根据等级大小推导或累加视频。
+  let sql = `SELECT v.*, tags.video_groups_csv
+    FROM rehab_videos v
+    LEFT JOIN (
+      SELECT video_id, GROUP_CONCAT(video_group ORDER BY video_group) AS video_groups_csv
+      FROM rehab_video_levels GROUP BY video_id
+    ) tags ON tags.video_id = v.id
+    WHERE v.is_active = 1`;
   const params = [];
 
   if (targetStatus && targetStatus !== 'all') {
-    sql += ' AND (target_status = ? OR target_status = "all")';
+    sql += ' AND (v.target_status = ? OR v.target_status = "all")';
     params.push(targetStatus);
   }
 
   if (videoGroup) {
-    sql += ' AND video_group = ?';
+    sql += ` AND EXISTS (SELECT 1 FROM rehab_video_levels membership
+      WHERE membership.video_id = v.id AND membership.video_group = ?)`;
     params.push(videoGroup);
   }
 
-  sql += ' ORDER BY sort_order ASC';
+  sql += ' ORDER BY v.sort_order ASC, v.id ASC';
   const [rows] = await pool.execute(sql, params);
 
-  rehabVideosCache.set(cacheKey, {
-    data: rows,
-    expiresAt: Date.now() + REHAB_VIDEO_CACHE_TTL_MS
-  });
-
-  return rows;
+  return rows.map(({ video_groups_csv, ...video }) => ({
+    ...video,
+    video_groups: video_groups_csv ? video_groups_csv.split(',') : []
+  }));
 }
 
 /**

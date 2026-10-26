@@ -98,9 +98,10 @@ export const RehabSection: React.FC<Props> = ({ userData, onUpdate }) => {
 
   const videosByGroup = useMemo(() => {
     return allVideos.reduce<Record<string, RehabVideoItem[]>>((acc, video) => {
-      const key = video.video_group || 'unknown';
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(video);
+      for (const key of video.video_groups) {
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(video);
+      }
       return acc;
     }, {});
   }, [allVideos]);
