@@ -14,6 +14,8 @@ export interface RehabVideo {
   category: string;
   difficulty: string;
   target_status: string;
+  video_group: string | null;
+  video_groups: string[];
   sort_order: number;
 }
 

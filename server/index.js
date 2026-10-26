@@ -1533,7 +1533,7 @@ app.get('/api/rehab/videos', authenticateToken, async (req, res) => {
   try {
     const { targetStatus, videoGroup } = req.query;
     const videos = await rehabService.getRehabVideos(targetStatus || null, videoGroup || null);
-    res.set('Cache-Control', 'private, max-age=300');
+    res.set('Cache-Control', 'no-store');
     res.json(videos);
   } catch (error) {
     console.error('获取康复视频错误:', error);

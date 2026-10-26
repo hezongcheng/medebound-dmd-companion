@@ -4,6 +4,24 @@
 
 # Run and deploy your AI Studio app
 
+## 康复视频标签（2026-10-26）
+
+1.0、2.0、3.0 的视频关联由 `rehab_video_levels` 独立管理，分别使用 `level1`、`level2`、`level3`。一个视频可关联多个等级，高等级不会自动包含低等级视频。列表、视频数量和训练播放均使用这些关联，原有连续打卡解锁规则保持不变。
+
+同步部署前后端并重启后端，启动时自动执行 `database/20261026_rehab_video_levels.sql`，需要 CREATE 权限。也可手工执行该 SQL。首次迁移仅复制原 `rehab_videos.video_group` 的精确分组，不累加；重复执行不会恢复已删除的关联。原字段保留兼容历史数据，后续请维护新关联表。
+
+例如将视频 5 同时标记为 1.0 和 3.0（不影响其他视频）：
+
+```sql
+START TRANSACTION;
+DELETE FROM rehab_video_levels WHERE video_id = 5;
+INSERT INTO rehab_video_levels (video_id, video_group)
+VALUES (5, 'level1'), (5, 'level3');
+COMMIT;
+```
+
+删除某个关联即可移除对应标签。没有关联的视频不会进入任何等级的跟练列表。数据库修改在重新加载视频列表后生效，接口不缓存标签结果。验证：`node --test server/rehabVideos.test.cjs`。
+
 This contains everything you need to run your app locally.
 
 View your app in AI Studio: https://ai.studio/apps/drive/1oLx1PwUsvuR8gtrRP07L6yRlUrhjJ8to
