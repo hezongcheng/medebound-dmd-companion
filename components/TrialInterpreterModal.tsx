@@ -1,18 +1,20 @@
 import { t, translateText, contentText, getLocale } from '../i18n/runtime';
 import { InterpretationShare } from './InterpretationShare';
 import React, { useState, useEffect, useRef } from 'react';
-import { ClinicalTrial, UserProfile, ChatMessage } from '../types';
+import { ClinicalTrial, UserProfile, ChatMessage, SavedInquiry } from '../types';
 import { analyzeTrial, chatWithTrial } from '../services/geminiService';
 import { fetchTrialMatches, fetchTrialSites, TrialMatchResult, TrialSite } from '../services/trialService';
-import { saveInquiry } from '../services/authService';
+import { saveInquiry, deleteInquiry } from '../services/authService';
 import { AdverseEventPanel } from './AdverseEventPanel';
-import { X, Send, Bot, User, Microscope, Save, Check, MapPin, Info, Loader2, ChevronDown, ChevronUp, Building2, Phone, Mail, Sparkles, CircleHelp, CircleX } from 'lucide-react';
+import { X, Send, Bot, User, Microscope, Star, Check, MapPin, Info, Loader2, ChevronDown, ChevronUp, Building2, Phone, Mail, Sparkles, CircleHelp, CircleX } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
   trial: ClinicalTrial;
   profile: UserProfile;
   onClose: () => void;
+  savedInquiries?: SavedInquiry[];
+  onSavedChange?: () => void;
 }
 
 const phaseText = (phases: string[]) => phases.map(phase => {
@@ -25,7 +27,7 @@ const statusText: Record<string, string> = {
   COMPLETED: '已完成', TERMINATED: '已终止', SUSPENDED: '已暂停', ENROLLING_BY_INVITATION: '仅邀请入组'
 };
 
-export const TrialInterpreterModal: React.FC<Props> = ({ trial, profile, onClose }) => {
+export const TrialInterpreterModal: React.FC<Props> = ({ trial, profile, onClose, savedInquiries, onSavedChange }) => {
   const locale = getLocale();
   const [analysis, setAnalysis] = useState<string>('');
   const [analysisForKey, setAnalysisForKey] = useState('');
@@ -33,7 +35,7 @@ export const TrialInterpreterModal: React.FC<Props> = ({ trial, profile, onClose
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [favorited, setFavorited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showInfoCard, setShowInfoCard] = useState(true);
   const [showMatch, setShowMatch] = useState(true);
@@ -44,6 +46,15 @@ export const TrialInterpreterModal: React.FC<Props> = ({ trial, profile, onClose
   const [matchResult, setMatchResult] = useState<TrialMatchResult | null>(null);
   const [matchLoading, setMatchLoading] = useState(true);
   const analysisCache = useRef(new Map<string, string>());
+
+  // 当前试验对应的收藏记录（同一条只保留一份）
+  const existingInquiry = (savedInquiries || []).find(
+    (item) => item.articleId === trial.nctId && (item.type ?? 'article') === 'trial'
+  );
+
+  useEffect(() => {
+    setFavorited(Boolean(existingInquiry));
+  }, [existingInquiry?.id]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const centerNames = sites.length ? sites.map(site => site.facility || [site.city, site.country].filter(Boolean).join(', ')) : trial.locations;
@@ -163,21 +174,30 @@ export const TrialInterpreterModal: React.FC<Props> = ({ trial, profile, onClose
     }
   };
 
-  const handleSave = async () => {
+  const handleToggleFavorite = async () => {
+      if (saving) return;
       if (matching || !activeMatchResult || loading || analysisForKey !== currentAnalysisKey) return;
       setSaving(true);
-      await saveInquiry({
-          id: `trial-${trial.nctId}-${Date.now()}`,
-          date: new Date().toLocaleDateString(getLocale()),
-          articleId: trial.nctId,
-          articleTitle: `临床试验匹配: ${contentText(trial.title, trial.titleZh)}`,
-          summary: analysis,
-          chatHistory: chatHistory,
-          type: 'trial'
-      });
-      setSaving(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      try {
+          if (existingInquiry) {
+              const ok = await deleteInquiry(existingInquiry.id);
+              if (ok) setFavorited(false);
+          } else {
+              const ok = await saveInquiry({
+                  id: `trial-${trial.nctId}-${Date.now()}`,
+                  date: new Date().toLocaleDateString(getLocale()),
+                  articleId: trial.nctId,
+                  articleTitle: `临床试验匹配: ${contentText(trial.title, trial.titleZh)}`,
+                  summary: analysis,
+                  chatHistory: chatHistory,
+                  type: 'trial'
+              });
+              if (ok) setFavorited(true);
+          }
+          onSavedChange?.();
+      } finally {
+          setSaving(false);
+      }
   };
 
   return (
@@ -195,14 +215,23 @@ export const TrialInterpreterModal: React.FC<Props> = ({ trial, profile, onClose
           <div className="flex items-center gap-2 shrink-0">
             <InterpretationShare title={translateText(contentText(trial.title, trial.titleZh))} sourceId={trial.nctId} kind="trial" disabled={matching || !activeMatchResult || loading || analysisForKey !== currentAnalysisKey} />
             <button
-                onClick={handleSave}
-                disabled={matching || !activeMatchResult || loading || analysisForKey !== currentAnalysisKey || saved || saving}
-                className={`flex items-center px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    saved ? 'bg-green-100 text-green-700' : 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+                type="button"
+                onClick={handleToggleFavorite}
+                disabled={matching || !activeMatchResult || loading || analysisForKey !== currentAnalysisKey || saving}
+                aria-label={translateText(favorited ? '取消收藏' : '收藏')}
+                aria-pressed={favorited}
+                title={translateText(favorited ? '取消收藏' : '收藏')}
+                className={`flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                    favorited
+                    ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
+                    : 'bg-white border-gray-200 text-gray-400 hover:text-amber-500 hover:border-amber-200 hover:bg-amber-50'
                 }`}
             >
-                {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin"/> : saved ? <Check className="w-4 h-4 mr-1"/> : <Save className="w-4 h-4 mr-1"/>}
-                <span className="hidden sm:inline">{translateText(saved ? '已保存' : '保存记录')}</span>
+                {saving ? (
+                   <Loader2 className="w-5 h-5 animate-spin"/>
+                ) : (
+                   <Star className="w-5 h-5" fill={favorited ? 'currentColor' : 'none'} strokeWidth={favorited ? 1.5 : 2}/>
+                )}
             </button>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <X className="w-6 h-6 text-gray-500" />

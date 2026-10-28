@@ -608,29 +608,27 @@ async function fetchAndCacheArticleFromCrossref(doi, userId = null) {
   return rows[0] ? toArticleResponse(rows[0]) : null;
 }
 
-function getTagLikePatterns(tagFilter = '') {
-  const normalized = String(tagFilter || '').trim().toLowerCase();
-  if (!normalized || normalized === 'all') {
+// 研究阶段（卡片左下角「类型」标签）筛选：库内实际值为「指南共识」（无斜杠），故做同义归一
+const RESEARCH_STAGE_ALIASES = {
+  '指南/共识': ['指南共识', '指南与共识', '指南', '共识'],
+  '人体临床数据': ['人体临床数据', '临床研究', '临床试验'],
+  '病例报告': ['病例报告', '个案报道'],
+  '药械分析': ['药械分析', '药物分析'],
+  '综述': ['综述'],
+  '动物实验': ['动物实验'],
+  '体外实验': ['体外实验']
+};
+
+function getResearchStageLikePatterns(stageFilter = '') {
+  const raw = String(stageFilter || '').trim();
+  if (!raw || raw.toLowerCase() === 'all') {
     return [];
   }
 
-  if (normalized === '临床试验' || normalized === 'clinical_trial' || normalized === 'clinical trial') {
-    return ['%clinical_trial%', '%clinical trial%', '%临床试验%'];
-  }
-  if (normalized === '综述' || normalized === 'review') {
-    return ['%review%', '%综述%'];
-  }
-  if (normalized === '指南/共识' || normalized === 'guideline' || normalized === 'guidelines') {
-    return ['%guideline%', '%guidelines%', '%指南%', '%共识%'];
-  }
-  if (normalized === '研究论文' || normalized === 'research' || normalized === 'paper') {
-    return ['%research%', '%paper%', '%研究论文%'];
-  }
-  if (normalized === '文章') {
-    return ['%文章%'];
-  }
-
-  return [];
+  const compact = raw.replace(/[／/]/g, '');
+  const aliases = RESEARCH_STAGE_ALIASES[raw] || RESEARCH_STAGE_ALIASES[compact] || [compact];
+  const patterns = aliases.filter(Boolean).map((alias) => `%${alias}%`);
+  return Array.from(new Set(patterns));
 }
 
 function toArticleResponse(article) {
@@ -1479,7 +1477,7 @@ async function getLatestCachedArticle() {
     return null;
   }
 }
-async function getAllCachedArticles(months = null, searchKeyword = '', tagFilter = '', page = 1, pageSize = 10) {
+async function getAllCachedArticles(months = null, searchKeyword = '', stageFilter = '', page = 1, pageSize = 10) {
   try {
     // Build search condition with parameterized queries
     let searchCondition = '';
@@ -1503,11 +1501,11 @@ async function getAllCachedArticles(months = null, searchKeyword = '', tagFilter
       searchCondition = appendKeywordGroupsToWhere(searchCondition, params, keywordGroups);
     }
 
-    const tagPatterns = getTagLikePatterns(tagFilter);
-    if (tagPatterns.length > 0) {
-      const tagClauses = tagPatterns.map(() => 'tags LIKE ?').join(' OR ');
-      searchCondition += searchCondition ? ` AND (${tagClauses})` : ` WHERE (${tagClauses})`;
-      params.push(...tagPatterns);
+    const stagePatterns = getResearchStageLikePatterns(stageFilter);
+    if (stagePatterns.length > 0) {
+      const stageClauses = stagePatterns.map(() => 'research_stage LIKE ?').join(' OR ');
+      searchCondition += searchCondition ? ` AND (${stageClauses})` : ` WHERE (${stageClauses})`;
+      params.push(...stagePatterns);
     }
 
     // 分页参数 - MySQL LIMIT/OFFSET 不能直接参数化，需要直接拼接
@@ -1545,7 +1543,7 @@ async function getAllCachedArticles(months = null, searchKeyword = '', tagFilter
   }
 }
 
-async function getTotalCachedArticles(months = null, searchKeyword = '', tagFilter = '') {
+async function getTotalCachedArticles(months = null, searchKeyword = '', stageFilter = '') {
   try {
     // Build search condition with parameterized queries
     let searchCondition = '';
@@ -1569,11 +1567,11 @@ async function getTotalCachedArticles(months = null, searchKeyword = '', tagFilt
       searchCondition = appendKeywordGroupsToWhere(searchCondition, params, keywordGroups);
     }
 
-    const tagPatterns = getTagLikePatterns(tagFilter);
-    if (tagPatterns.length > 0) {
-      const tagClauses = tagPatterns.map(() => 'tags LIKE ?').join(' OR ');
-      searchCondition += searchCondition ? ` AND (${tagClauses})` : ` WHERE (${tagClauses})`;
-      params.push(...tagPatterns);
+    const stagePatterns = getResearchStageLikePatterns(stageFilter);
+    if (stagePatterns.length > 0) {
+      const stageClauses = stagePatterns.map(() => 'research_stage LIKE ?').join(' OR ');
+      searchCondition += searchCondition ? ` AND (${stageClauses})` : ` WHERE (${stageClauses})`;
+      params.push(...stagePatterns);
     }
 
     const countSql = `SELECT COUNT(*) as total FROM articles_cache` + searchCondition;

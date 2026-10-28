@@ -1105,9 +1105,9 @@ app.get('/api/articles/count', async (req, res) => {
   try {
     const months = req.query.months ? toPositiveInt(req.query.months, null, { min: 1, max: 120 }) : null;
     const search = (req.query.search || '').trim();
-    const tag = (req.query.tag || '').trim();
+    const stage = (req.query.stage || '').trim();
     
-    const total = await getTotalCachedArticles(months, search, tag);
+    const total = await getTotalCachedArticles(months, search, stage);
     res.json(total);
   } catch (error) {
     console.error('获取文章总数错误:', error);
@@ -1149,11 +1149,11 @@ app.get('/api/articles', async (req, res) => {
   try {
     const months = req.query.months ? toPositiveInt(req.query.months, null, { min: 1, max: 120 }) : null;
     const search = (req.query.search || '').trim();
-    const tag = (req.query.tag || '').trim();
+    const stage = (req.query.stage || '').trim();
     const page = toPositiveInt(req.query.page, 1, { min: 1, max: 1000000 });
     const pageSize = toPositiveInt(req.query.pageSize, 10, { min: 1, max: 50 });
 
-    const articles = await getAllCachedArticles(months, search, tag, page, pageSize);
+    const articles = await getAllCachedArticles(months, search, stage, page, pageSize);
     res.json(articles);
   } catch (error) {
     console.error('获取文章列表错误:', error);

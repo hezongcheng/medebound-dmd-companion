@@ -1,32 +1,43 @@
 import { t, translateText, contentText, getLocale } from '../i18n/runtime';
 import { InterpretationShare } from './InterpretationShare';
 import React, { useState, useEffect, useRef } from 'react';
-import { FDADrug, UserProfile, ChatMessage, CHINA_STATUS_LABELS, CHINA_STATUS_COLORS } from '../types';
+import { FDADrug, UserProfile, ChatMessage, SavedInquiry, CHINA_STATUS_LABELS, CHINA_STATUS_COLORS } from '../types';
 import { analyzeDrug, chatWithDrug } from '../services/geminiService';
-import { saveInquiry } from '../services/authService';
+import { saveInquiry, deleteInquiry } from '../services/authService';
 import { AdverseEventPanel } from './AdverseEventPanel';
-import { X, Send, Bot, User, ShieldCheck, Save, Check, Pill, Microscope, Loader2, AlertTriangle, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Send, Bot, User, ShieldCheck, Star, Pill, Microscope, Loader2, AlertTriangle, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
   drug: FDADrug;
   profile: UserProfile;
   onClose: () => void;
+  savedInquiries?: SavedInquiry[];
+  onSavedChange?: () => void;
 }
 
-export const DrugInterpreterModal: React.FC<Props> = ({ drug, profile, onClose }) => {
+export const DrugInterpreterModal: React.FC<Props> = ({ drug, profile, onClose, savedInquiries, onSavedChange }) => {
   const locale = getLocale();
   const [analysis, setAnalysis] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [favorited, setFavorited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showInfoCard, setShowInfoCard] = useState(true);
   const [showAnalysis, setShowAnalysis] = useState(true);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 当前药物对应的收藏记录（同一药物只保留一份）
+  const existingInquiry = (savedInquiries || []).find(
+    (item) => item.articleId === drug.brandName && (item.type ?? 'article') === 'drug'
+  );
+
+  useEffect(() => {
+    setFavorited(Boolean(existingInquiry));
+  }, [existingInquiry?.id]);
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
@@ -74,20 +85,29 @@ export const DrugInterpreterModal: React.FC<Props> = ({ drug, profile, onClose }
     }
   };
 
-  const handleSave = async () => {
+  const handleToggleFavorite = async () => {
+      if (saving || loading) return;
       setSaving(true);
-      await saveInquiry({
-          id: `drug-${drug.brandName}-${Date.now()}`,
-          date: new Date().toLocaleDateString(getLocale()),
-          articleId: drug.brandName,
-          articleTitle: `药物适配: ${contentText(drug.brandName, drug.brandNameCn)}`,
-          summary: analysis,
-          chatHistory: chatHistory,
-          type: 'drug'
-      });
-      setSaving(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      try {
+          if (existingInquiry) {
+              const ok = await deleteInquiry(existingInquiry.id);
+              if (ok) setFavorited(false);
+          } else {
+              const ok = await saveInquiry({
+                  id: `drug-${drug.brandName}-${Date.now()}`,
+                  date: new Date().toLocaleDateString(getLocale()),
+                  articleId: drug.brandName,
+                  articleTitle: `药物适配: ${contentText(drug.brandName, drug.brandNameCn)}`,
+                  summary: analysis,
+                  chatHistory: chatHistory,
+                  type: 'drug'
+              });
+              if (ok) setFavorited(true);
+          }
+          onSavedChange?.();
+      } finally {
+          setSaving(false);
+      }
   };
 
   return (
@@ -105,14 +125,23 @@ export const DrugInterpreterModal: React.FC<Props> = ({ drug, profile, onClose }
           <div className="flex items-center gap-2 shrink-0">
             <InterpretationShare title={translateText(contentText(drug.brandName, drug.brandNameCn))} sourceId={drug.brandName} kind="drug" disabled={loading} />
             <button
-                onClick={handleSave}
-                disabled={loading || saved || saving}
-                className={`flex items-center px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    saved ? 'bg-green-100 text-green-700' : 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+                type="button"
+                onClick={handleToggleFavorite}
+                disabled={loading || saving}
+                aria-label={translateText(favorited ? '取消收藏' : '收藏')}
+                aria-pressed={favorited}
+                title={translateText(favorited ? '取消收藏' : '收藏')}
+                className={`flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                    favorited
+                    ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
+                    : 'bg-white border-gray-200 text-gray-400 hover:text-amber-500 hover:border-amber-200 hover:bg-amber-50'
                 }`}
             >
-                {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin"/> : saved ? <Check className="w-4 h-4 mr-1"/> : <Save className="w-4 h-4 mr-1"/>}
-                <span className="hidden sm:inline">{translateText(saved ? '已保存' : '保存记录')}</span>
+                {saving ? (
+                   <Loader2 className="w-5 h-5 animate-spin"/>
+                ) : (
+                   <Star className="w-5 h-5" fill={favorited ? 'currentColor' : 'none'} strokeWidth={favorited ? 1.5 : 2}/>
+                )}
             </button>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <X className="w-6 h-6 text-gray-500" />

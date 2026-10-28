@@ -158,7 +158,7 @@ const normalizeServerArticle = (article: any): Article => ({
 const fetchFromServerCache = async (
   months: number | null = null, 
   searchKeyword: string = '', 
-  tagFilter: string = 'all',
+  stageFilter: string = 'all',
   page: number = 1, 
   pageSize: number = 10
 ): Promise<Article[] | null> => {
@@ -166,7 +166,7 @@ const fetchFromServerCache = async (
     let url = `${API_BASE}/api/articles?page=${page}&pageSize=${pageSize}`;
     if (months) url += `&months=${months}`;
     if (searchKeyword) url += `&search=${encodeURIComponent(searchKeyword)}`;
-    if (tagFilter && tagFilter !== 'all') url += `&tag=${encodeURIComponent(tagFilter)}`;
+    if (stageFilter && stageFilter !== 'all') url += `&stage=${encodeURIComponent(stageFilter)}`;
     const res = await fetch(url);
     if (!res.ok) return null;
     
@@ -211,14 +211,14 @@ export const fetchArticleByDoiFromServer = async (doi: string): Promise<{ succes
 export const getArticlesCount = async (
   months: number | null,
   searchKeyword: string = '',
-  tagFilter: string = 'all'
+  stageFilter: string = 'all'
 ): Promise<number> => {
   try {
     let url = `${API_BASE}/api/articles/count`;
     const params = [];
     if (months) params.push(`months=${months}`);
     if (searchKeyword) params.push(`search=${encodeURIComponent(searchKeyword)}`);
-    if (tagFilter && tagFilter !== 'all') params.push(`tag=${encodeURIComponent(tagFilter)}`);
+    if (stageFilter && stageFilter !== 'all') params.push(`stage=${encodeURIComponent(stageFilter)}`);
     if (params.length > 0) url += `?${params.join('&')}`;
     const res = await fetch(url);
     if (!res.ok) return 0;
@@ -235,11 +235,11 @@ export const searchArticles = async (
   months: number | null, 
   interests: InterestArea[], 
   searchKeyword: string = '',
-  tagFilter: string = 'all',
+  stageFilter: string = 'all',
   page: number = 1,
   pageSize: number = 10
 ): Promise<Article[]> => {
-  const cachedArticles = await fetchFromServerCache(months, searchKeyword, tagFilter, page, pageSize);
+  const cachedArticles = await fetchFromServerCache(months, searchKeyword, stageFilter, page, pageSize);
   if (cachedArticles && cachedArticles.length > 0) {
     const uniqueArticles = [];
     const seenIds = new Set();
