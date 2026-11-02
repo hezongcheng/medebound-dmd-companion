@@ -1,6 +1,6 @@
 import { useLanguage } from './i18n/LanguageProvider';
 import { LanguageSelector } from './components/LanguageSelector';
-import { plural, t, translateText, contentText, getLocale } from './i18n/runtime';
+import { plural, t, translateText, translateStageLabel, contentText, getLocale } from './i18n/runtime';
 import { apiGet, apiPost } from './services/apiClient';
 ﻿import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { Login } from './components/Login';
@@ -15,36 +15,65 @@ import type { HotArticle, HotArticlePeriod } from './services/pubmedService';
 import { fetchDmdTrials, fetchTrialByNctFromServer, getUserFetchedTrials, getUserFetchedTrialsCount, getRandomUserFetchedTrials } from './services/trialService';
 import { fetchDmdDrugs } from './services/fdaService';
 import { logout, getCurrentUser, getUserData, saveUserProfile, isAuthenticated, checkEmailStatus, getLocalRehabRecords, getLocalRehabStatusHistory } from './services/authService';
-import { UserProfile, Article, UserDatabaseEntry, InterestArea, ClinicalTrial, FDADrug, ArticleType } from './types';
-import { Calendar, Loader2, Sparkles, LayoutGrid, Settings, Bookmark, Microscope, Pill, CheckCircle2, AlertCircle, Search, Accessibility, RefreshCw, Eye } from 'lucide-react';
+import { UserProfile, Article, UserDatabaseEntry, InterestArea, ClinicalTrial, FDADrug } from './types';
+import { Calendar, Loader2, Sparkles, LayoutGrid, UserRound, ChevronLeft, ChevronRight, Star, Microscope, Pill, CheckCircle2, AlertCircle, Search, Accessibility, RefreshCw, Eye } from 'lucide-react';
 import { computeRelevance } from './utils/computeRelevance';
-import { recommendArticles } from './utils/contentPreference.mjs';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-type ViewState = 'rehab' | 'feed' | 'trials' | 'drugs' | 'settings' | 'saved';
+type ViewState = 'rehab' | 'feed' | 'trials' | 'drugs' | 'settings' | 'saved' | 'me';
 type FeedTab = 'latest' | 'targeted';
 type DoiFetchNotice = { type: 'success' | 'error'; text: string } | null;
 type TrialTab = 'list' | 'targeted';
 type TrialTypeFilter = '全部' | '治疗性试验' | '患者登记' | '观察性研究';
 type TrialStatusFilter = '全部' | '招募中' | '活跃未招募';
-type ArticleSortKey = 'recommend' | 'time' | 'match' | 'if' | 'views';
+type ArticleSortKey = 'time' | 'match' | 'if' | 'views';
 const FEED_PAGE_SIZE = 10;
 const FEED_BULK_PAGE_SIZE = 50;
 const USER_FETCHED_PAGE_SIZE = 6;
 const COMMUNITY_FETCHED_LIMIT = 9;
 const COMMUNITY_CAROUSEL_INTERVAL_MS = 5000;
 const ARTICLE_SORT_OPTIONS: { key: ArticleSortKey; label: string }[] = [
-  { key: 'recommend', label: '推荐' },
   { key: 'time', label: '时间' },
   { key: 'match', label: '相关性' },
   { key: 'if', label: 'IF' },
   { key: 'views', label: '阅读人数' }
 ];
-type ArticleTagFilter = 'all' | ArticleType;
-const ARTICLE_TAG_FILTER_OPTIONS: { key: ArticleTagFilter; label: string }[] = [
+type ArticleStageFilter =
+  | 'all'
+  | '指南/共识'
+  | '人体临床数据'
+  | '病例报告'
+  | '药械分析'
+  | '综述'
+  | '动物实验'
+  | '体外实验';
+
+const ARTICLE_STAGE_FILTER_OPTIONS: { key: ArticleStageFilter; label: string }[] = [
   { key: 'all', label: '全部' },
-  ...Object.values(ArticleType).map((tag) => ({ key: tag, label: tag }))
+  { key: '指南/共识', label: '指南/共识' },
+  { key: '人体临床数据', label: '人体临床数据' },
+  { key: '病例报告', label: '病例报告' },
+  { key: '药械分析', label: '药械分析' },
+  { key: '综述', label: '综述' },
+  { key: '动物实验', label: '动物实验' },
+  { key: '体外实验', label: '体外实验' }
 ];
+
+// 归一化：去掉斜杠与空白，使「指南/共识」与库内「指南共识」等价
+const normalizeStageValue = (value: string): string =>
+  (value || '').replace(/[／/]/g, '').replace(/\s+/g, '').trim();
+
+// 单篇匹配：支持「综述/指南共识」这类多值字段
+const matchArticleStage = (researchStage: string | undefined, filter: ArticleStageFilter): boolean => {
+  if (filter === 'all') return true;
+  const target = normalizeStageValue(filter);
+  if (!target) return true;
+  return (researchStage || '')
+    .split(/[／/、,，;；|]/)
+    .map(normalizeStageValue)
+    .filter(Boolean)
+    .some((value) => value === target || value.includes(target));
+};
 const HOT_PERIOD_OPTIONS: { key: HotArticlePeriod; label: string }[] = [
   { key: 'month', label: '30天' },
   { key: 'twoMonths', label: '60天' },
@@ -55,6 +84,7 @@ const VIEW_PATHS: Record<ViewState, string> = {
   feed: '/feed',
   trials: '/trials',
   drugs: '/drugs',
+  me: '/me',
   settings: '/settings',
   saved: '/saved'
 };
@@ -201,7 +231,6 @@ const sortArticlesByKey = (
     ...article,
     matchPercent: computeRelevance(article, profile || undefined)
   }));
-  if (sortKey === 'recommend') return recommendArticles(enriched, profile?.contentPreference);
 
   return [...enriched].sort((a, b) => {
     if (sortKey === 'match') return (b.matchPercent || 0) - (a.matchPercent || 0);
@@ -327,8 +356,8 @@ const App: React.FC = () => {
   const [refreshingCommunityFetchedTrials, setRefreshingCommunityFetchedTrials] = useState(false);
   const [showCommunityFetchedTrials, setShowCommunityFetchedTrials] = useState(false);
   const [communityTrialCarouselPage, setCommunityTrialCarouselPage] = useState(0);
-  const [articleSortKey, setArticleSortKey] = useState<ArticleSortKey>('recommend');
-  const [selectedTagFilter, setSelectedTagFilter] = useState<ArticleTagFilter>('all');
+  const [articleSortKey, setArticleSortKey] = useState<ArticleSortKey>('time');
+  const [selectedStageFilter, setSelectedStageFilter] = useState<ArticleStageFilter>('all');
   const [feedTab, setFeedTab] = useState<FeedTab>('latest');
   const [sortedPool, setSortedPool] = useState<Article[] | null>(null);
   const [userDataLoadError, setUserDataLoadError] = useState<string | null>(null);
@@ -427,12 +456,12 @@ const App: React.FC = () => {
     interests: InterestArea[],
     keyword: string,
     total: number,
-    tagFilter: ArticleTagFilter
+    stageFilter: ArticleStageFilter
   ): Promise<Article[]> => {
     const totalPages = Math.max(1, Math.ceil(total / FEED_BULK_PAGE_SIZE));
     const pageFetches: Promise<Article[]>[] = [];
     for (let p = 1; p <= totalPages; p += 1) {
-      pageFetches.push(searchArticles(null, interests, keyword, tagFilter, p, FEED_BULK_PAGE_SIZE));
+      pageFetches.push(searchArticles(null, interests, keyword, stageFilter, p, FEED_BULK_PAGE_SIZE));
     }
     const pages = await Promise.all(pageFetches);
     const seen = new Set<string>();
@@ -566,7 +595,7 @@ const App: React.FC = () => {
     }
   };
 
-  const feedKey = JSON.stringify([user, currentView, feedTab, searchKeyword, selectedTagFilter, articleSortKey, userData?.profile]);
+  const feedKey = JSON.stringify([user, currentView, feedTab, searchKeyword, selectedStageFilter, articleSortKey, userData?.profile]);
   const feedKeyRef = useRef(feedKey);
   feedKeyRef.current = feedKey;
   const feedRequestRef = useRef(0);
@@ -585,21 +614,21 @@ const App: React.FC = () => {
     setHasMoreArticles(false);
     try {
       setCurrentPage(1);
-      const total = await getArticlesCount(null, keyword, selectedTagFilter);
+      const total = await getArticlesCount(null, keyword, selectedStageFilter);
 
       if (!active()) return;
       setTotalArticles(total);
 
       if (articleSortKey === 'time') {
         setSortedPool(null);
-        const data = await searchArticles(null, interests, keyword, selectedTagFilter, 1, FEED_PAGE_SIZE);
+        const data = await searchArticles(null, interests, keyword, selectedStageFilter, 1, FEED_PAGE_SIZE);
         if (!active()) return;
         setArticles(data);
         setHasMoreArticles(data.length === FEED_PAGE_SIZE);
         return;
       }
 
-      const all = await fetchAllFeedArticles(interests, keyword, total, selectedTagFilter);
+      const all = await fetchAllFeedArticles(interests, keyword, total, selectedStageFilter);
       if (!active()) return;
       const sorted = sortArticlesByKey(all, articleSortKey, userData?.profile);
       setSortedPool(sorted);
@@ -663,7 +692,7 @@ const App: React.FC = () => {
       };
       fetchFeed();
     }
-  }, [user, userInterests, currentView, feedTab, searchKeyword, articleSortKey, selectedTagFilter, userData?.profile]);
+  }, [user, userInterests, currentView, feedTab, searchKeyword, articleSortKey, selectedStageFilter, userData?.profile]);
 
   useEffect(() => {
     if (!user || currentView !== 'feed' || feedTab !== 'latest') return;
@@ -969,7 +998,7 @@ const App: React.FC = () => {
       }
 
       const nextPage = currentPage + 1;
-      const moreArticles = await searchArticles(null, userInterests, searchKeyword, selectedTagFilter, nextPage, FEED_PAGE_SIZE);
+      const moreArticles = await searchArticles(null, userInterests, searchKeyword, selectedStageFilter, nextPage, FEED_PAGE_SIZE);
       if (!active()) return;
       
       if (moreArticles.length > 0) {
@@ -1122,11 +1151,11 @@ const App: React.FC = () => {
   }, [articles, articleSortKey, userData?.profile]);
 
   const filteredArticles = useMemo(() => {
-    if (selectedTagFilter === 'all') {
+    if (selectedStageFilter === 'all') {
       return sortedArticles;
     }
-    return sortedArticles.filter((article) => article.tags?.includes(selectedTagFilter));
-  }, [sortedArticles, selectedTagFilter]);
+    return sortedArticles.filter((article) => matchArticleStage(article.researchStage, selectedStageFilter));
+  }, [sortedArticles, selectedStageFilter]);
 
   const filteredTrials = useMemo(() => {
     const normalizedKeyword = trialSearchKeyword.trim().toLowerCase();
@@ -1258,6 +1287,9 @@ const App: React.FC = () => {
       );
   }
 
+  // 「我的」聚合页：包含 我的收藏(saved) 与 我的档案(settings) 两个子页面
+  const isMeSection = currentView === 'me' || currentView === 'saved' || currentView === 'settings';
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-gray-900">
       
@@ -1296,19 +1328,12 @@ const App: React.FC = () => {
                     <Pill className="w-4 h-4 sm:mr-2" />
                     <span className="hidden sm:inline">{t("ui.drugs")}</span>
                  </button>
-                 <button aria-label={t('ui.consultations')}
-                    onClick={() => navigateToView('saved')}
-                    className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'saved' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                 <button aria-label={t('ui.my')}
+                    onClick={() => navigateToView('me')}
+                    className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all ${isMeSection ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                  >
-                    <Bookmark className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">{t("ui.consultations")}</span>
-                 </button>
-                 <button aria-label={t('ui.settings')}
-                    onClick={() => navigateToView('settings')}
-                    className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'settings' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                 >
-                    <Settings className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline">{t("ui.settings")}</span>
+                    <UserRound className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">{t("ui.my")}</span>
                  </button>
              </nav>
           </div>
@@ -1331,18 +1356,73 @@ const App: React.FC = () => {
             </Suspense>
         )}
 
-        {/* VIEW: SETTINGS */}
+        {/* VIEW: ME（我的：收藏 + 档案入口） */}
+        {currentView === 'me' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">{t("ui.my")}</h2>
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  <button
+                    type="button"
+                    onClick={() => navigateToView('saved')}
+                    className="group rounded-xl border border-gray-200 bg-white p-3 sm:p-5 text-left transition-all hover:border-brand-200 hover:shadow-md shadow-sm"
+                  >
+                    <div className="flex items-start justify-between">
+                      <span className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-500">
+                        <Star className="w-5 h-5" fill="currentColor" />
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 transition-colors group-hover:text-brand-500" />
+                    </div>
+                    <div className="mt-3">
+                      <div className="text-sm sm:text-base font-bold text-gray-900">{t("ui.my.favorites")}</div>
+                      <p className="mt-1 text-xs text-gray-500">{t("ui.my.favorites.hint", { p0: (userData.savedInquiries || []).length })}</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigateToView('settings')}
+                    className="group rounded-xl border border-gray-200 bg-white p-3 sm:p-5 text-left transition-all hover:border-brand-200 hover:shadow-md shadow-sm"
+                  >
+                    <div className="flex items-start justify-between">
+                      <span className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                        <UserRound className="w-5 h-5" />
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 transition-colors group-hover:text-brand-500" />
+                    </div>
+                    <div className="mt-3">
+                      <div className="text-sm sm:text-base font-bold text-gray-900">{t("ui.my.profile")}</div>
+                      <p className="mt-1 text-xs text-gray-500">{t("ui.my.profile.hint")}</p>
+                    </div>
+                  </button>
+                </div>
+            </div>
+        )}
+
+        {/* VIEW: SETTINGS（我的档案） */}
         {currentView === 'settings' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <button
+                  type="button"
+                  onClick={() => navigateToView('me')}
+                  className="mb-4 inline-flex items-center text-sm font-medium text-gray-500 hover:text-brand-600 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-0.5" />{t("ui.back")}
+                </button>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">{t("ui.personal.settings")}</h2>
                 <LanguageSelector />
                 <ProfileForm initialData={userData.profile} onSave={handleProfileSave} onLogout={handleLogout} />
             </div>
         )}
 
-        {/* VIEW: SAVED */}
+        {/* VIEW: SAVED（我的收藏） */}
         {currentView === 'saved' && (
              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <button
+                  type="button"
+                  onClick={() => navigateToView('me')}
+                  className="mb-4 inline-flex items-center text-sm font-medium text-gray-500 hover:text-brand-600 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-0.5" />{t("ui.back")}
+                </button>
                 <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-500 animate-spin" /></div>}>
                   <LazySavedInquiries inquiries={userData.savedInquiries || []} />
                 </Suspense>
@@ -1533,21 +1613,21 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-500 shrink-0 whitespace-nowrap">{t("ui.tags")}</span>
+                      <span className="text-xs font-semibold text-gray-500 shrink-0 whitespace-nowrap">{t("ui.type")}</span>
                       <div className="bg-gray-50 p-1 rounded-full border border-gray-200 shadow-sm flex-1 overflow-x-auto">
                         <div className="flex items-center gap-1 min-w-max">
-                          {ARTICLE_TAG_FILTER_OPTIONS.map((option) => (
+                          {ARTICLE_STAGE_FILTER_OPTIONS.map((option) => (
                             <button
                               key={option.key}
                               type="button"
-                              onClick={() => setSelectedTagFilter(option.key)}
+                              onClick={() => setSelectedStageFilter(option.key)}
                               className={`px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
-                                selectedTagFilter === option.key
+                                selectedStageFilter === option.key
                                   ? 'bg-brand-600 text-white shadow-sm'
                                   : 'text-gray-600 hover:text-gray-800 hover:bg-white'
                               }`}
                             >
-                              {translateText(option.label)}
+                              {translateStageLabel(option.label)}
                             </button>
                           ))}
                         </div>
@@ -2212,6 +2292,11 @@ const App: React.FC = () => {
           <LazyAIInterpreterModal 
               article={selectedArticle} 
               profile={userData.profile} 
+              savedInquiries={userData.savedInquiries || []}
+              onSavedChange={async () => {
+                  const refreshed = await getUserData();
+                  if (refreshed) setUserData(refreshed);
+              }}
               onClose={() => {
                   setSelectedArticle(null);
                   closeSharedLink();
@@ -2226,6 +2311,11 @@ const App: React.FC = () => {
           <LazyDrugInterpreterModal 
               drug={selectedDrug} 
               profile={userData.profile} 
+              savedInquiries={userData.savedInquiries || []}
+              onSavedChange={async () => {
+                  const refreshed = await getUserData();
+                  if (refreshed) setUserData(refreshed);
+              }}
               onClose={() => {
                   setSelectedDrug(null);
                   closeSharedLink();
@@ -2240,6 +2330,11 @@ const App: React.FC = () => {
           <LazyTrialInterpreterModal 
               trial={selectedTrial} 
               profile={userData.profile} 
+              savedInquiries={userData.savedInquiries || []}
+              onSavedChange={async () => {
+                  const refreshed = await getUserData();
+                  if (refreshed) setUserData(refreshed);
+              }}
               onClose={() => {
                   setSelectedTrial(null);
                   closeSharedLink();

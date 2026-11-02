@@ -3,25 +3,27 @@ import { InterpretationShare } from './InterpretationShare';
 import React, { useState, useEffect, useRef } from 'react';
 import { Article, UserProfile, ChatMessage, SavedInquiry } from '../types';
 import { analyzeArticle, chatWithArticle, getRecommendedQuestions } from '../services/geminiService';
-import { saveInquiry } from '../services/authService';
+import { saveInquiry, deleteInquiry } from '../services/authService';
 import { apiGet } from '../services/apiClient';
-import { X, Send, Bot, User, Sparkles, AlertTriangle, Save, Check, FileText, Users, BookOpen, Loader2, Eye, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Send, Bot, User, Sparkles, AlertTriangle, Star, FileText, Users, BookOpen, Loader2, Eye, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 interface Props {
   article: Article;
   profile: UserProfile;
   onClose: () => void;
+  savedInquiries?: SavedInquiry[];
+  onSavedChange?: () => void;
 }
 
-export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose }) => {
+export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose, savedInquiries, onSavedChange }) => {
   const locale = getLocale();
   const [summary, setSummary] = useState<string>('');
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [favorited, setFavorited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showOriginalContent, setShowOriginalContent] = useState(false);
   const [originalContent, setOriginalContent] = useState<string>('');
@@ -33,6 +35,15 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose 
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // 当前文章对应的收藏记录（同篇文章只保留一条）
+  const existingInquiry = (savedInquiries || []).find(
+    (item) => item.articleId === article.id && (item.type ?? 'article') === 'article'
+  );
+
+  useEffect(() => {
+    setFavorited(Boolean(existingInquiry));
+  }, [existingInquiry?.id]);
 
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
@@ -134,21 +145,30 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose 
     }
   };
 
-  const handleSave = async () => {
+  const handleToggleFavorite = async () => {
+      if (saving || loadingSummary) return;
       setSaving(true);
-      const inquiry: SavedInquiry = {
-          id: Date.now().toString(),
-          date: new Date().toLocaleDateString(getLocale()),
-          articleId: article.id,
-          articleTitle: contentText(article.title, article.titleZh),
-          summary: summary,
-          chatHistory: chatHistory,
-          type: 'article'
-      };
-      await saveInquiry(inquiry);
-      setSaving(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      try {
+          if (existingInquiry) {
+              const ok = await deleteInquiry(existingInquiry.id);
+              if (ok) setFavorited(false);
+          } else {
+              const inquiry: SavedInquiry = {
+                  id: Date.now().toString(),
+                  date: new Date().toLocaleDateString(getLocale()),
+                  articleId: article.id,
+                  articleTitle: contentText(article.title, article.titleZh),
+                  summary: summary,
+                  chatHistory: chatHistory,
+                  type: 'article'
+              };
+              const ok = await saveInquiry(inquiry);
+              if (ok) setFavorited(true);
+          }
+          onSavedChange?.();
+      } finally {
+          setSaving(false);
+      }
   };
 
   return (
@@ -166,22 +186,23 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose 
           <div className="flex items-center gap-2 shrink-0">
             <InterpretationShare title={translateText(contentText(article.title, article.titleZh))} sourceId={article.id} kind="article" disabled={loadingSummary} />
             <button
-                onClick={handleSave}
-                disabled={loadingSummary || saved || saving}
-                className={`flex items-center px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    saved
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+                type="button"
+                onClick={handleToggleFavorite}
+                disabled={loadingSummary || saving}
+                aria-label={translateText(favorited ? '取消收藏' : '收藏')}
+                aria-pressed={favorited}
+                title={translateText(favorited ? '取消收藏' : '收藏')}
+                className={`flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                    favorited
+                    ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
+                    : 'bg-white border-gray-200 text-gray-400 hover:text-amber-500 hover:border-amber-200 hover:bg-amber-50'
                 }`}
             >
                 {saving ? (
-                   <Loader2 className="w-4 h-4 mr-1 animate-spin"/>
-                ) : saved ? (
-                   <Check className="w-4 h-4 mr-1"/>
+                   <Loader2 className="w-5 h-5 animate-spin"/>
                 ) : (
-                   <Save className="w-4 h-4 mr-1"/>
+                   <Star className="w-5 h-5" fill={favorited ? 'currentColor' : 'none'} strokeWidth={favorited ? 1.5 : 2}/>
                 )}
-                <span className="hidden sm:inline">{translateText(saved ? '已保存' : saving ? '保存中...' : '保存记录')}</span>
             </button>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <X className="w-6 h-6 text-gray-500" />

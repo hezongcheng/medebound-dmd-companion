@@ -401,27 +401,7 @@ export const ProfileForm: React.FC<Props> = ({ initialData, onSave, onLogout, is
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <SectionTitle number={4}>{t("ui.content.preference")}</SectionTitle>
-          <p id="content-preference-description" className="mb-5 text-sm leading-6 text-slate-500">{t("ui.choose.the.content.you.prefer.recommendations.adjust.the.balance")}</p>
-          <label htmlFor="content-preference" className="mb-4 flex items-center justify-between gap-3 text-sm font-semibold">
-            <span className="text-teal-700">{t("ui.clinical.practice")}</span>
-            <output className="rounded-full bg-teal-50 px-3 py-1 text-xs text-teal-700">
-              {translateText((formData.contentPreference ?? 40) < 45 ? '偏向临床实用' : (formData.contentPreference ?? 40) > 55 ? '偏向前沿研究' : '均衡探索')}
-            </output>
-            <span className="text-slate-700">{t("ui.emerging.research")}</span>
-          </label>
-          <input id="content-preference" type="range" min="0" max="100" step="1"
-            value={formData.contentPreference ?? 40}
-            aria-label={t("ui.content.preference.clinical.practice.to.emerging.research")}
-            aria-describedby="content-preference-description"
-            aria-valuetext={translateText(`临床实用至前沿研究，当前位置 ${formData.contentPreference ?? 40}`)}
-            onChange={event => setFormData({ ...formData, contentPreference: Number(event.target.value) })}
-            className="h-2 w-full cursor-pointer accent-teal-600" />
-          <p className="mt-3 text-xs leading-5 text-slate-400">{t("ui.the.default.slightly.favors.clinical.practice.this.setting.controls")}</p>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <SectionTitle number={5}>{t("ui.research.interests")}</SectionTitle>
+          <SectionTitle number={4}>{t("ui.research.interests")}</SectionTitle>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {Object.values(InterestArea).map(area => {
               const selected = formData.interests?.includes(area) || false;

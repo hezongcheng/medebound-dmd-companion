@@ -1,4 +1,4 @@
-import { formatDate as localizedDate, t, translateText, contentText, getLocale } from '../i18n/runtime';
+import { formatDate as localizedDate, t, translateText, translateStageLabel, contentText, getLocale } from '../i18n/runtime';
 import React from 'react';
 import { Article, ArticleType } from '../types';
 import { BookOpen, Activity, FileText, FlaskConical, Star, Beaker, Tag } from 'lucide-react';
@@ -97,7 +97,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({ article, onSelect }) =
         <div className="flex flex-wrap items-center gap-3 mb-3 text-xs">
           {article.researchStage && (
             <span className="inline-flex items-center px-2 py-1 rounded-md bg-teal-50 text-teal-700 border border-teal-100 font-medium">
-              <Beaker className="w-3 h-3 mr-1" />{translateText(article.researchStage)}
+              <Beaker className="w-3 h-3 mr-1" />{translateStageLabel(article.researchStage)}
             </span>
           )}
           {article.matchPercent != null && article.matchPercent > 0 && (

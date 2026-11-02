@@ -54,6 +54,29 @@ export function translateText<T>(value: T): T {
 }
 export const contentText = (original?: string | null, chinese?: string | null): string =>
   currentLocale === 'zh-CN' ? chinese || original || '' : original || chinese || '';
+
+/**
+ * 研究阶段（文献类型）标签专用翻译。
+ * 区别于 translateText：该字段在库内存在三种异写，需要一并兜住
+ *   1) 多值用「无空格斜杠」连接，如「体外实验/动物实验」—— translateText 的分隔符是「 / 」，识别不到；
+ *   2) 异写「指南共识」（无斜杠），已通过 labels.guideline.consensus.alias 建别名；
+ *   3) 空值 / NULL 直接返回空串，避免渲染出 undefined。
+ * 中文模式下原样返回，保证「体外实验/动物实验」这类紧凑写法不被重排成「 / 」。
+ */
+export function translateStageLabel(value?: string | null): string {
+  const raw = (value || '').toString().trim();
+  if (!raw) return '';
+  if (currentLocale === 'zh-CN') return raw;
+  // 先整串匹配：「指南/共识」本身就是一个带斜杠的完整标签，必须先命中再考虑拆分
+  const whole = translateText(raw);
+  if (whole !== raw) return whole;
+  return raw
+    .split(/\s*[/／、；;,]\s*/)
+    .map(part => translateText(part.trim()))
+    .filter(Boolean)
+    .join(' / ');
+}
+
 export function formatDate(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(currentLocale, {
