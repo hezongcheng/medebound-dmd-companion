@@ -459,6 +459,7 @@ async function getCheckinStatsByLevel(userId) {
     pool.execute(
       `SELECT
          COUNT(DISTINCT checkin_date) AS total_days,
+         COUNT(*) AS total_sessions,
          COALESCE(ROUND(SUM(COALESCE(duration_actual, 0)) / 60), 0) AS total_minutes
        FROM rehab_checkins
        WHERE user_id = ? AND is_completed = 1`,
@@ -485,6 +486,7 @@ async function getCheckinStatsByLevel(userId) {
     isLevel3Unlocked,
     todayCompletedGroups,
     totalDays: totalsRows[0].total_days,
+    totalSessions: totalsRows[0].total_sessions,
     totalMinutes: totalsRows[0].total_minutes,
     history: historyRows
   };

@@ -1,4 +1,5 @@
 import { LanguageProvider } from './i18n/LanguageProvider';
+import './index.css';
 // Polyfill for Object.hasOwn (ES2022) - 兼容旧浏览器
 if (!Object.hasOwn) {
   Object.hasOwn = function(obj: object, prop: PropertyKey): boolean {

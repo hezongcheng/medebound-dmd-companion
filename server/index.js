@@ -1529,6 +1529,8 @@ app.post('/api/admin/cache/clean', authenticateToken, requireAdmin, async (req, 
 // =============================================
 
 // 获取康复视频列表（可按行动状态过滤）
+require('./rehabLessonService').registerLessonRoutes(app, pool, authenticateToken);
+
 app.get('/api/rehab/videos', authenticateToken, async (req, res) => {
   try {
     const { targetStatus, videoGroup } = req.query;

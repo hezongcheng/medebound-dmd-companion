@@ -241,6 +241,7 @@ export const getRehabVideos = async (videoGroup?: string): Promise<RehabVideoIte
 };
 
 export interface RehabLevelStats {
+  totalSessions: number;
   level1Streak: number;
   level2Streak: number;
   level3Streak: number;
