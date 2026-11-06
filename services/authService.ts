@@ -296,3 +296,28 @@ export const tickCheckin = async (checkinId: number): Promise<boolean> => {
   const result = await apiPost(`/api/rehab/checkin/${checkinId}/tick`, {});
   return result?.success === true;
 };
+
+export const checkPhoneStatus = async (): Promise<{ bound: boolean; phone: string | null } | null> => {
+  const result = await apiGet<{ bound: boolean; phone: string | null }>('/api/user/phone-status', { throwOnHttpError: true });
+  if (result && typeof result.bound !== 'boolean') throw new Error('手机号状态接口返回格式异常，请检查后端部署及 API 地址');
+  return result;
+};
+export const sendPhoneLoginCode = async (phone: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/phone/send-code`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...getLanguageHeaders() }, body: JSON.stringify({ phone })
+    });
+    const data = await response.json();
+    return { success: response.ok, message: response.ok ? data.message : data.error || '发送失败' };
+  } catch { return { success: false, message: '网络错误，请稍后重试' }; }
+};
+export const loginWithPhoneCode = async (phone: string, code: string): Promise<boolean> => {
+  const response = await fetch(`${API_BASE}/api/auth/phone/verify-code`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...getLanguageHeaders() }, body: JSON.stringify({ phone, code })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || '登录失败');
+  localStorage.setItem(TOKEN_KEY, data.token);
+  localStorage.setItem(USER_KEY, data.username);
+  return true;
+};

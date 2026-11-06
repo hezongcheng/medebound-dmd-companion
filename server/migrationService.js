@@ -579,6 +579,7 @@ async function runMigrations() {
     await ensureColumn(connection, 'rehab_videos', 'video_version',
       "ALTER TABLE rehab_videos ADD COLUMN video_version VARCHAR(20) NULL DEFAULT NULL COMMENT '视频版本，独立于训练等级，例如1.0/2.0/3.0' AFTER video_group");
     await require('./rehabLessonSchema').applyRehabLessonSchema(connection, ensureColumn);
+    await require('./phoneSchema').applyPhoneSchema(connection, ensureColumn);
   } finally {
     connection.release();
   }

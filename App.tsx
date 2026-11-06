@@ -8,13 +8,13 @@ import { ProfileForm } from './components/ProfileForm';
 import { ArticleCard } from './components/ArticleCard';
 import { TrialCard } from './components/TrialCard';
 import { DrugCard } from './components/DrugCard';
-import { EmailBinding } from './components/EmailBinding';
+import { PhoneBinding } from './components/PhoneBinding';
 import { Logo } from './components/Logo';
 import { searchArticles, refreshArticlesFromServer, fetchArticleByDoiFromServer, getArticlesCount, getHotArticles, getUserFetchedArticles, getUserFetchedArticlesCount, getRandomUserFetchedArticles, recordArticleView } from './services/pubmedService';
 import type { HotArticle, HotArticlePeriod } from './services/pubmedService';
 import { fetchDmdTrials, fetchTrialByNctFromServer, getUserFetchedTrials, getUserFetchedTrialsCount, getRandomUserFetchedTrials } from './services/trialService';
 import { fetchDmdDrugs } from './services/fdaService';
-import { logout, getCurrentUser, getUserData, saveUserProfile, isAuthenticated, checkEmailStatus, getLocalRehabRecords, getLocalRehabStatusHistory } from './services/authService';
+import { logout, getCurrentUser, getUserData, saveUserProfile, isAuthenticated, checkPhoneStatus, getLocalRehabRecords, getLocalRehabStatusHistory } from './services/authService';
 import { UserProfile, Article, UserDatabaseEntry, InterestArea, ClinicalTrial, FDADrug } from './types';
 import { Calendar, Loader2, Sparkles, LayoutGrid, UserRound, ChevronLeft, ChevronRight, Star, Microscope, Pill, CheckCircle2, AlertCircle, Search, Accessibility, RefreshCw, Eye } from 'lucide-react';
 import { computeRelevance } from './utils/computeRelevance';
@@ -322,7 +322,7 @@ const App: React.FC = () => {
   const [hasMoreArticles, setHasMoreArticles] = useState(true);
   const [totalArticles, setTotalArticles] = useState(0);
   const [initializing, setInitializing] = useState(true);
-  const [emailBound, setEmailBound] = useState<boolean | null>(null);
+  const [phoneBound, setPhoneBound] = useState<boolean | null>(null);
   const [doiInput, setDoiInput] = useState('');
   const [doiFetchNotice, setDoiFetchNotice] = useState<DoiFetchNotice>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -361,14 +361,14 @@ const App: React.FC = () => {
   const [feedTab, setFeedTab] = useState<FeedTab>('latest');
   const [sortedPool, setSortedPool] = useState<Article[] | null>(null);
   const [userDataLoadError, setUserDataLoadError] = useState<string | null>(null);
-  const [emailStatusError, setEmailStatusError] = useState<string | null>(null);
+  const [phoneStatusError, setPhoneStatusError] = useState<string | null>(null);
   const hasAutoRefreshedFeedRef = useRef(false);
   const pullRefreshStartYRef = useRef<number | null>(null);
   const pullRefreshRunningRef = useRef(false);
   const pullRefreshLastTsRef = useRef(0);
 
   useEffect(() => {
-    if (!shareId || !user || initializing || !userData?.profile?.isConfigured || emailBound !== true) return;
+    if (!shareId || !user || initializing || !userData?.profile?.isConfigured || phoneBound !== true) return;
     let active = true;
     setLoadingShare(true); setShareError('');
     setSelectedArticle(null); setSelectedDrug(null); setSelectedTrial(null);
@@ -385,13 +385,13 @@ const App: React.FC = () => {
       .catch(error => { if (active) setShareError(error.message); })
       .finally(() => { if (active) setLoadingShare(false); });
     return () => { active = false; };
-  }, [shareId, user, initializing, userData?.profile?.isConfigured, emailBound, shareAttempt]);
+  }, [shareId, user, initializing, userData?.profile?.isConfigured, phoneBound, shareAttempt]);
 
-  const resolveEmailBoundStatus = async (): Promise<boolean | null> => {
+  const resolvePhoneBoundStatus = async (): Promise<boolean | null> => {
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const status = await checkEmailStatus();
+        const status = await checkPhoneStatus();
         if (status) return status.bound;
       } catch (error) { lastError = error; }
       if (!isAuthenticated()) return null;
@@ -413,22 +413,22 @@ const App: React.FC = () => {
 
   const bootstrapAfterAuth = async (routeForConfiguredUser?: ViewState): Promise<void> => {
     setUserDataLoadError(null);
-    setEmailStatusError(null);
+    setPhoneStatusError(null);
 
-    let emailBoundStatus: boolean | null;
+    let phoneBoundStatus: boolean | null;
     try {
-      emailBoundStatus = await resolveEmailBoundStatus();
+      phoneBoundStatus = await resolvePhoneBoundStatus();
     } catch (error) {
-      setEmailStatusError(`邮箱状态检查失败：${error instanceof Error ? error.message : '请求异常'}。请重试或重新登录。`);
+      setPhoneStatusError(`手机号状态检查失败：${error instanceof Error ? error.message : '请求异常'}。请重试或重新登录。`);
       return;
     }
-    if (!isAuthenticated() || emailBoundStatus == null) {
+    if (!isAuthenticated() || phoneBoundStatus == null) {
       setUser(null);
       setUserData(null);
-      setEmailBound(null);
+      setPhoneBound(null);
       return;
     }
-    setEmailBound(emailBoundStatus);
+    setPhoneBound(phoneBoundStatus);
 
     const data = await fetchUserDataWithRetry(2);
     if (!data) {
@@ -945,9 +945,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleEmailBindingSuccess = (email: string) => {
-    console.log('邮箱绑定成功:', email);
-    setEmailBound(true);
+  const handlePhoneBindingSuccess = (_phone: string) => {
+    setPhoneBound(true);
   };
 
   const handleLogout = async () => {
@@ -961,8 +960,8 @@ const App: React.FC = () => {
     setSortedPool(null);
     setTrials([]);
     setDrugs([]);
-    setEmailBound(null);
-    setEmailStatusError(null);
+    setPhoneBound(null);
+    setPhoneStatusError(null);
     setUserDataLoadError(null);
     navigateToView('rehab', true);
   };
@@ -1198,10 +1197,10 @@ const App: React.FC = () => {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
-  if (emailStatusError) {
+  if (phoneStatusError) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="max-w-md w-full bg-white border border-red-100 rounded-2xl shadow-sm p-6 text-center">
-        <p className="text-sm text-red-600 mb-4">{translateText(emailStatusError)}</p>
+        <p className="text-sm text-red-600 mb-4">{translateText(phoneStatusError)}</p>
         <button
           type="button"
           onClick={async () => {
@@ -1219,8 +1218,8 @@ const App: React.FC = () => {
           await logout();
           setUser(null);
           setUserData(null);
-          setEmailBound(null);
-          setEmailStatusError(null);
+          setPhoneBound(null);
+          setPhoneStatusError(null);
           setUserDataLoadError(null);
         }} className="ml-3 px-5 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50">
           {t("ui.sign.in.again")}</button>
@@ -1228,12 +1227,12 @@ const App: React.FC = () => {
     </div>;
   }
 
-  // 强制邮箱绑定（登录后且未绑定邮箱）
-  if (emailBound === false) {
-    return <EmailBinding onBindingSuccess={handleEmailBindingSuccess} />;
+  // 强制手机号绑定（登录后且未绑定手机号）
+  if (phoneBound === false) {
+    return <PhoneBinding onBindingSuccess={handlePhoneBindingSuccess} />;
   }
 
-  if (emailBound === null) {
+  if (phoneBound === null) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
     </div>;

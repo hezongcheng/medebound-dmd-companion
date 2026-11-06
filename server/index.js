@@ -176,6 +176,7 @@ function toPositiveInt(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER
 // 邮箱绑定验证 API
 // =============================================
 const { sendVerificationCode, verifyCode, sendLoginVerificationCode, verifyLoginCode } = require('./emailService');
+require('./phoneAuth').registerPhoneAuth(app, { pool, authenticateToken, secret: JWT_SECRET, recordLogin: recordUserOperationSafely });
 
 // 发送邮箱验证码
 app.post('/api/email/send-code', authenticateToken, async (req, res) => {
