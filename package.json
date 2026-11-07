@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "npm start --prefix server",
+    "dev:status": "node scripts/check-dev-ports.mjs",
     "prebuild": "node server/syncLocales.cjs",
     "build": "vite build",
     "preview": "vite preview"

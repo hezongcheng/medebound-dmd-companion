@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { pool, testConnection } = require('./db');
+const { pool, testConnection, getConnection } = require('./db');
 const { ensureShareTable, registerShareRoutes } = require('./interpretationShares');
 const { runMigrations } = require('./migrationService');
 const { chatWithArticle, analyzeDrug, chatWithDrug, analyzeTrial, chatWithTrial, generateRecommendedQuestions } = require('./geminiService');
@@ -442,7 +442,7 @@ app.get('/api/auth/wechat/callback', async (req, res) => {
     } else {
       // 新微信用户，自动创建账号
       console.log('新微信用户，开始创建账号...');
-      const connection = await pool.getConnection();
+      const connection = await getConnection();
       try {
         await connection.beginTransaction();
         
@@ -580,7 +580,12 @@ app.get('/api/user/data', authenticateToken, async (req, res) => {
       steroidMedication: profiles[0].steroid_medication || undefined,
       mutationType: profiles[0].mutation_type || undefined,
       exonStart: profiles[0].exon_start == null ? undefined : Number(profiles[0].exon_start),
-      exonEnd: profiles[0].exon_end == null ? undefined : Number(profiles[0].exon_end)
+      exonEnd: profiles[0].exon_end == null ? undefined : Number(profiles[0].exon_end),
+      heightCm: profiles[0].height_cm == null ? undefined : Number(profiles[0].height_cm),
+      weightKg: profiles[0].weight_kg == null ? undefined : Number(profiles[0].weight_kg),
+      rehabTraining: profiles[0].rehab_training || undefined,
+      calciumSupplement: profiles[0].calcium_supplement || undefined,
+      calciumDoseMg: profiles[0].calcium_dose_mg == null ? undefined : Number(profiles[0].calcium_dose_mg)
     } : null;
     
     const savedInquiries = inquiries.map(i => ({
@@ -605,8 +610,9 @@ app.get('/api/user/data', authenticateToken, async (req, res) => {
 
 // 保存用户档案
 app.post('/api/user/profile', authenticateToken, async (req, res) => {
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await getConnection();
     await connection.beginTransaction();
     
     const userId = req.user.userId;
@@ -654,6 +660,11 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
           mutation_type = ?,
           exon_start = ?,
           exon_end = ?,
+          height_cm = ?,
+          weight_kg = ?,
+          rehab_training = ?,
+          calcium_supplement = ?,
+          calcium_dose_mg = ?,
           content_preference = ?,
           updated_at = NOW()
         WHERE user_id = ?`,
@@ -679,6 +690,11 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
           profile.mutationType || null,
           profile.exonStart == null ? null : Number(profile.exonStart),
           profile.exonEnd == null ? null : Number(profile.exonEnd),
+          profile.heightCm == null ? null : Number(profile.heightCm),
+          profile.weightKg == null ? null : Number(profile.weightKg),
+          profile.rehabTraining || null,
+          profile.calciumSupplement || null,
+          profile.calciumDoseMg == null ? null : Number(profile.calciumDoseMg),
           profile.contentPreference,
           userId
         ]
@@ -687,8 +703,8 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
       // 创建新档案
       await connection.execute(
         `INSERT INTO user_profiles 
-          (user_id, is_configured, age, birth_date, genetic_profile, ambulatory_status, on_steroids, region, clinical_notes, literature_push_enabled, has_joint_pain, joint_pain_details, has_joint_contracture, joint_contracture_details, province, mobility_stage, respiratory_support, ejection_fraction, steroid_status, steroid_medication, mutation_type, exon_start, exon_end, content_preference)
-        VALUES (?, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          (user_id, is_configured, age, birth_date, genetic_profile, ambulatory_status, on_steroids, region, clinical_notes, literature_push_enabled, has_joint_pain, joint_pain_details, has_joint_contracture, joint_contracture_details, province, mobility_stage, respiratory_support, ejection_fraction, steroid_status, steroid_medication, mutation_type, exon_start, exon_end, height_cm, weight_kg, rehab_training, calcium_supplement, calcium_dose_mg, content_preference)
+        VALUES (?, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
         [
           userId,
           profile.age,
@@ -712,6 +728,11 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
           profile.mutationType || null,
           profile.exonStart == null ? null : Number(profile.exonStart),
           profile.exonEnd == null ? null : Number(profile.exonEnd),
+          profile.heightCm == null ? null : Number(profile.heightCm),
+          profile.weightKg == null ? null : Number(profile.weightKg),
+          profile.rehabTraining || null,
+          profile.calciumSupplement || null,
+          profile.calciumDoseMg == null ? null : Number(profile.calciumDoseMg),
           profile.contentPreference
         ]
       );
@@ -735,11 +756,15 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
     await connection.commit();
     res.json({ success: true });
   } catch (error) {
-    await connection.rollback();
-    console.error('保存档案错误:', error);
-    res.status(500).json({ error: '服务器错误' });
+    if (connection) {
+      try { await connection.rollback(); } catch (rollbackError) { console.error('回滚档案事务失败:', rollbackError.code || '', rollbackError.message); }
+    }
+    console.error('保存档案错误:', error.status || 500, error.code || '', error.message);
+    // 校验类错误（出生日期、外显子范围等）应把原因回给前端，而不是一律“服务器错误”
+    const status = error.status || 500;
+    res.status(status).json({ error: status === 500 ? '服务器错误，请重试' : error.message });
   } finally {
-    connection.release();
+    if (connection) connection.release();
   }
 });
 
@@ -749,7 +774,7 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
 
 // 保存查询
 app.post('/api/user/inquiry', authenticateToken, async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await getConnection();
   try {
     await connection.beginTransaction();
     

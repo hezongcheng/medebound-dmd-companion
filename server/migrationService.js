@@ -10,6 +10,7 @@ const ARTICLE_DAILY_VIEWS_MIGRATION_ID = '20260928_article_daily_views_v1';
 const ARTICLE_SPLIT_ANALYSIS_MIGRATION_ID = '20260929_article_split_analysis_v1';
 const ARTICLE_UV_MIGRATION_ID = '20260930_article_uv_v1';
 const CONTENT_PREFERENCE_MIGRATION_ID = '20261015_content_preference_v1';
+const PROFILE_BODY_MIGRATION_ID = '20261105_profile_body_rehab_calcium_v1';
 
 async function ensureIndex(connection, tableName, indexName, ddlSql) {
   const [rows] = await connection.execute(
@@ -576,6 +577,23 @@ async function runMigrations() {
       preferred_locale VARCHAR(16) NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    const [profileBodyRows] = await connection.execute(
+      'SELECT id FROM schema_migrations WHERE id = ? LIMIT 1', [PROFILE_BODY_MIGRATION_ID]
+    );
+    if (profileBodyRows.length === 0) {
+      await ensureColumn(connection, 'user_profiles', 'height_cm',
+        "ALTER TABLE user_profiles ADD COLUMN height_cm DECIMAL(5,1) NULL DEFAULT NULL COMMENT '身高（cm）' AFTER exon_end");
+      await ensureColumn(connection, 'user_profiles', 'weight_kg',
+        "ALTER TABLE user_profiles ADD COLUMN weight_kg DECIMAL(5,1) NULL DEFAULT NULL COMMENT '体重（kg）' AFTER height_cm");
+      await ensureColumn(connection, 'user_profiles', 'rehab_training',
+        "ALTER TABLE user_profiles ADD COLUMN rehab_training VARCHAR(10) NULL DEFAULT NULL COMMENT '是否规律做康复训练：yes/no/unsure' AFTER weight_kg");
+      await ensureColumn(connection, 'user_profiles', 'calcium_supplement',
+        "ALTER TABLE user_profiles ADD COLUMN calcium_supplement VARCHAR(10) NULL DEFAULT NULL COMMENT '是否服用钙补充剂：yes/no/unsure' AFTER rehab_training");
+      await ensureColumn(connection, 'user_profiles', 'calcium_dose_mg',
+        "ALTER TABLE user_profiles ADD COLUMN calcium_dose_mg SMALLINT UNSIGNED NULL DEFAULT NULL COMMENT '钙补充剂每日元素钙剂量（mg/日）' AFTER calcium_supplement");
+      await connection.execute('INSERT INTO schema_migrations (id) VALUES (?)', [PROFILE_BODY_MIGRATION_ID]);
+      console.log(`Profile body/rehab/calcium migration completed: ${PROFILE_BODY_MIGRATION_ID}`);
+    }
   } finally {
     connection.release();
   }
