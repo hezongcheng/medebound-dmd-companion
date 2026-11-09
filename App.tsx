@@ -8,6 +8,7 @@ import { ProfileForm } from './components/ProfileForm';
 import { ArticleCard } from './components/ArticleCard';
 import { TrialCard } from './components/TrialCard';
 import { DrugCard } from './components/DrugCard';
+import { SecurityBinding } from './components/SecurityBinding';
 import { PhoneBinding } from './components/PhoneBinding';
 import { Logo } from './components/Logo';
 import { searchArticles, refreshArticlesFromServer, fetchArticleByDoiFromServer, getArticlesCount, getHotArticles, getUserFetchedArticles, getUserFetchedArticlesCount, getRandomUserFetchedArticles, recordArticleView } from './services/pubmedService';
@@ -20,7 +21,7 @@ import { Calendar, Loader2, Sparkles, LayoutGrid, UserRound, ChevronLeft, Chevro
 import { computeRelevance } from './utils/computeRelevance';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-type ViewState = 'rehab' | 'feed' | 'trials' | 'drugs' | 'settings' | 'saved' | 'me';
+type ViewState = 'rehab' | 'feed' | 'trials' | 'drugs' | 'settings' | 'saved' | 'me' | 'security';
 type FeedTab = 'latest' | 'targeted';
 type DoiFetchNotice = { type: 'success' | 'error'; text: string } | null;
 type TrialTab = 'list' | 'targeted';
@@ -86,6 +87,7 @@ const VIEW_PATHS: Record<ViewState, string> = {
   drugs: '/drugs',
   me: '/me',
   settings: '/settings',
+  security: '/security',
   saved: '/saved'
 };
 
@@ -1287,7 +1289,7 @@ const App: React.FC = () => {
   }
 
   // 「我的」聚合页：包含 我的收藏(saved) 与 我的档案(settings) 两个子页面
-  const isMeSection = currentView === 'me' || currentView === 'saved' || currentView === 'settings';
+  const isMeSection = currentView === 'security' || currentView === 'me' || currentView === 'saved' || currentView === 'settings';
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-gray-900">
@@ -1392,9 +1394,19 @@ const App: React.FC = () => {
                       <p className="mt-1 text-xs text-gray-500">{t("ui.my.profile.hint")}</p>
                     </div>
                   </button>
+                  <button type="button" onClick={() => navigateToView('security')}
+                    className="group col-span-2 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-brand-200 hover:shadow-md sm:p-5">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 text-green-600"><CheckCircle2 className="h-5 w-5" /></span>
+                      <div className="flex-1"><div className="text-sm font-bold text-gray-900 sm:text-base">安全绑定</div><p className="mt-1 text-xs text-gray-500">查看或绑定邮箱与手机号</p></div>
+                      <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-brand-500" />
+                    </div>
+                  </button>
                 </div>
             </div>
         )}
+
+        {currentView === 'security' && <SecurityBinding onBack={() => navigateToView('me')} />}
 
         {/* VIEW: SETTINGS（我的档案） */}
         {currentView === 'settings' && (

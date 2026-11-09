@@ -189,6 +189,9 @@ app.post('/api/email/send-code', authenticateToken, async (req, res) => {
     }
     
     // 检查邮箱是否已被其他用户绑定
+    const [current] = await pool.execute('SELECT email, is_active FROM users WHERE id = ?', [userId]);
+    if (!current.length || !current[0].is_active) return res.status(403).json({ error: '账号不可用' });
+    if (current[0].email) return res.status(409).json({ error: '当前账号已绑定邮箱' });
     const [existing] = await pool.execute(
       'SELECT id FROM users WHERE email = ? AND id != ?',
       [email, userId]
@@ -228,14 +231,16 @@ app.post('/api/email/verify', authenticateToken, async (req, res) => {
     }
     
     // 验证成功，更新用户邮箱
-    await pool.execute(
-      'UPDATE users SET email = ? WHERE id = ?',
+    const [updated] = await pool.execute(
+      "UPDATE users SET email = ? WHERE id = ? AND is_active = TRUE AND (email IS NULL OR email = '')",
       [result.email, userId]
     );
+    if (!updated.affectedRows) return res.status(409).json({ error: '账号不可用或已绑定邮箱，请刷新绑定状态' });
     
     console.log(`✅ 用户 ${userId} 成功绑定邮箱: ${result.email}`);
     res.json({ message: '邮箱绑定成功', email: result.email });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: '该邮箱已被其他账号绑定' });
     console.error('验证邮箱错误:', error);
     res.status(500).json({ error: '服务器错误' });
   }
