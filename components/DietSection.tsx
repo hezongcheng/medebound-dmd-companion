@@ -4,8 +4,7 @@ import {
   AlertCircle, Apple, Bone, ChevronRight, Droplets, Info, Scale, Salad, Utensils, Wind
 } from 'lucide-react';
 import { UserDatabaseEntry } from '../types';
-import { DietLogPanel } from './DietLogPanel';
-import { NutritionManagePanel } from './NutritionManagePanel';
+import { DietRecords } from './DietRecords';
 import { purgeTestResidue } from '../utils/storageCleanup';
 import { calciumTarget, fiberTarget, waterRecommendation } from '../utils/dietTargets';
 import type { CalciumRecommendation } from '../utils/dietTargets';
@@ -350,10 +349,7 @@ export const DietSection: React.FC<Props> = ({ userData }) => {
       )}
 
       {/* 今日记录：食物库选择 + 今日清单 + 营养合计 */}
-      {tab === 'log' && <DietLogPanel profile={profile} />}
-
-      {/* 营养管理：身高/体重/BMI 走势 + 近一周营养（含钠钙纤维）与饮水 */}
-      {tab === 'manage' && <NutritionManagePanel profile={profile} />}
+      {tab !== 'guide' && <DietRecords key={userData?.username} tab={tab} profile={profile} />}
     </div>
   );
 };

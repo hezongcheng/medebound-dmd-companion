@@ -582,6 +582,15 @@ async function runMigrations() {
       "ALTER TABLE rehab_videos ADD COLUMN video_version VARCHAR(20) NULL DEFAULT NULL COMMENT '视频版本，独立于训练等级，例如1.0/2.0/3.0' AFTER video_group");
     await require('./rehabLessonSchema').applyRehabLessonSchema(connection, ensureColumn);
     await require('./phoneSchema').applyPhoneSchema(connection, ensureColumn);
+    await connection.execute(`CREATE TABLE IF NOT EXISTS user_diet_records (
+      user_id BIGINT NOT NULL,
+      record_date DATE NOT NULL,
+      entries JSON NOT NULL,
+      version INT UNSIGNED NOT NULL DEFAULT 1,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, record_date),
+      CONSTRAINT fk_user_diet_records_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     const [profileBodyRows] = await connection.execute(
       'SELECT id FROM schema_migrations WHERE id = ? LIMIT 1', [PROFILE_BODY_MIGRATION_ID]
     );

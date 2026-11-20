@@ -11,13 +11,14 @@
  *      （存量数据由 utils/storageCleanup.ts 一次性清掉）。
  *
  * 2. 近一周营养（蛋白质 / 碳水 / 脂肪 / 钠 / 钙 / 纤维 / 饮水）
- *    - 只读「今日记录」已落盘的 localStorage（dmd_diet_foods_v1 / dmd_diet_water_v1）；
+ *    - 食物取账号饮食记录，饮水取本机记录；
  *    - 某天没有记录就是空值（柱子为 0），不做任何填充或估算。
  *
  * 日期一律取系统日期（本地时区），不存在任何可切换的时间轴。
  */
 
-import { readLogStore, readWater, sumNutrients } from './dietLog';
+import { readWater, sumNutrients } from './dietLog';
+import type { DietLogEntry } from './dietLog';
 import { bmiReference, computeDietTargets } from './dietTargets';
 import type { DietProfile, DietTargets } from './dietTargets';
 
@@ -25,7 +26,7 @@ import type { DietProfile, DietTargets } from './dietTargets';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
-/** Date → 'YYYY-MM-DD'（本地时区，与 dietLog 的 todayKey 同格式） */
+/** Date → 'YYYY-MM-DD'（本地时区） */
 export const dateKeyOf = (d: Date): string =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
@@ -220,8 +221,7 @@ const emptyDay = (date: Date, dayIndex: number): DaySeries => ({
  * 近 N 天营养序列（默认 7 天，含今天）
  * 只取「今日记录」的真实条目，没有记录的那天各项为 0。
  */
-export const buildWeekSeries = (days = 7, today: Date = new Date()): DaySeries[] => {
-  const store = readLogStore();
+export const buildWeekSeries = (store: Record<string, DietLogEntry[]>, days = 7, today: Date = new Date()): DaySeries[] => {
   const out: DaySeries[] = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
     const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset);
@@ -245,7 +245,8 @@ export const buildWeekSeries = (days = 7, today: Date = new Date()): DaySeries[]
       continue;
     }
 
-    out.push(emptyDay(date, -offset));
+    const water = readWater(dateStr);
+    out.push({ ...emptyDay(date, -offset), water, hasRecord: water > 0 });
   }
   return out;
 };
@@ -316,11 +317,13 @@ export interface NutritionTrendBundle {
 }
 
 export const buildNutritionTrends = (
-  profile: DietProfile | null | undefined
+  profile: DietProfile | null | undefined,
+  dietEntries: Record<string, DietLogEntry[]>,
+  today: Date
 ): NutritionTrendBundle => {
   const weightKg = positive(profile?.weightKg);
   return {
-    week: buildWeekSeries(),
+    week: buildWeekSeries(dietEntries, 7, today),
     trend: buildBodyTrend(profile),
     targets: computeDietTargets(profile, weightKg),
     bands: bmiBands(profile?.age)

@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Ban, ChevronRight, Minus, Plus, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import { FoodLibrary } from './FoodLibrary';
 import {
-  addEntry, defaultPortionOf, entryFromFood, formatToday, measureUnitOf, nutrientsOf, readEntries,
-  readWater, readWaterLimit, readWeight, round0, round1, sumNutrients, todayKey, writeEntries, writeWater,
+  addEntry, defaultPortionOf, entryFromFood, measureUnitOf, nutrientsOf,
+  readWater, readWaterLimit, readWeight, round0, round1, sumNutrients, writeWater,
   writeWaterLimit
 } from '../utils/dietLog';
 import type { DietLogEntry, FoodItem, FoodServing } from '../utils/dietLog';
 import { computeDietTargets } from '../utils/dietTargets';
 import type { DietProfile } from '../utils/dietTargets';
+import { longDate } from '../utils/nutritionTrends';
 
 /**
  * 今日记录面板
@@ -31,8 +32,7 @@ import type { DietProfile } from '../utils/dietTargets';
  *    - 钙按年龄 + 激素状态取推荐值（含补充剂，食物补差额）、钠 ≤2,300（超 2,000 转橙）、
  *      纤维按年龄 25 / 31 / 38 g、水按体重（Holliday–Segar：1–10 kg 100 mL/kg；
  *      11–20 kg 1,000 + 50 × (kg − 10)；>20 kg 1,500 + 20 × (kg − 20)）；
- * 5. 记录只落 localStorage（食物 dmd_diet_foods_v1、饮水 dmd_diet_water_v1、饮水上限
- *    dmd_diet_water_limit_v1 全局键），不调后端；
+ * 5. 食物清单随账号保存，饮水及饮水上限保存在浏览器。
  *    体重统一取自「我的档案」，不再在此处单独填写。
  */
 
@@ -706,7 +706,6 @@ const PortionControl: React.FC<PortionProps> = ({ entry, presets, onGrams, onPre
   };
 
   const commit = (raw: string) => {
-    setDraft(raw);
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) return;
     if (unit && base > 0) {
@@ -756,8 +755,14 @@ const PortionControl: React.FC<PortionProps> = ({ entry, presets, onGrams, onPre
         min={unit ? UNIT_MIN : 1}
         max={unit ? 99 : 5000}
         value={displayValue}
-        onChange={(event) => commit(event.target.value)}
-        onBlur={() => setDraft(null)}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={(event) => {
+          if (draft !== null) commit(event.currentTarget.value);
+          setDraft(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
         aria-label={unit ? `份数（${unit}）` : '克数'}
         className="h-7 w-11 flex-none rounded-lg border border-gray-200 text-center text-xs font-bold text-gray-800 focus:border-brand-300 focus:outline-none"
       />
@@ -782,24 +787,21 @@ const PortionControl: React.FC<PortionProps> = ({ entry, presets, onGrams, onPre
 interface Props {
   /** 「我的档案」里的临床概况：年龄 / 身高 / 体重 / 身体阶段 / 康复训练 / 钙补充剂剂量 */
   profile?: DietProfile | null;
+  dateKey: string;
+  entries: DietLogEntry[];
+  onEntriesChange: (apply: (entries: DietLogEntry[]) => DietLogEntry[]) => void;
+  saving: boolean;
+  saveMessage: string;
 }
 
-export const DietLogPanel: React.FC<Props> = ({ profile }) => {
-  /** 当前记录日期：系统日期（进页面时取一次，与改动前一致） */
-  const dateKey = useMemo(() => todayKey(), []);
-  const [entries, setEntries] = useState<DietLogEntry[]>(() => readEntries(todayKey()));
+export const DietLogPanel: React.FC<Props> = ({ profile, dateKey, entries, onEntriesChange, saving, saveMessage }) => {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [waterMl, setWaterMl] = useState<number>(() => readWater(todayKey()));
+  const [waterMl, setWaterMl] = useState<number>(() => readWater(dateKey));
   /** 自定义饮水上限（限液医嘱，跨天保留）；null = 按体重推荐摄入 */
   const [waterLimit, setWaterLimit] = useState<number | null>(() => readWaterLimit());
   const [waterSheet, setWaterSheet] = useState<WaterSheetMode | null>(null);
-
-  // 日期固定为进入页面时的系统日期（不跟随时钟，故无需按天切换数据）
-  useEffect(() => {
-    writeEntries(dateKey, entries);
-  }, [dateKey, entries]);
 
   useEffect(() => {
     writeWater(dateKey, waterMl);
@@ -866,29 +868,29 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
 
   const handleAdd = useCallback((item: FoodItem) => {
     const portion = defaultPortionOf(item);
-    setEntries((prev) => addEntry(prev, entryFromFood(item, portion.grams, portion.servingGrams)));
-  }, []);
+    onEntriesChange((prev) => addEntry(prev, entryFromFood(item, portion.grams, portion.servingGrams)));
+  }, [onEntriesChange]);
 
   /** 食物库里再点一次「✓」：删除该食物的记录（同一食物只保留一行，所以整行移除） */
   const handleRemove = useCallback((item: FoodItem) => {
-    setEntries((prev) => prev.filter((entry) => String(entry.foodId) !== String(item.id)));
-  }, []);
+    onEntriesChange((prev) => prev.filter((entry) => String(entry.foodId) !== String(item.id)));
+  }, [onEntriesChange]);
 
   const setGrams = (key: string, grams: number) => {
     const next = Math.max(1, Math.min(5000, Math.round(grams)));
-    setEntries((prev) =>
-      prev.map((entry) => (entry.key === key ? { ...entry, grams: next } : entry))
+    onEntriesChange((prev) =>
+      prev.map((entry) => (entry.key === key && entry.grams !== next ? { ...entry, grams: next } : entry))
     );
   };
 
   const setPreset = (key: string, serving: FoodServing) => {
     const grams = Math.max(1, Math.round(Number(serving.weightG)));
-    setEntries((prev) =>
+    onEntriesChange((prev) =>
       prev.map((entry) => (entry.key === key ? { ...entry, grams, servingGrams: grams } : entry))
     );
   };
 
-  const removeEntry = (key: string) => setEntries((prev) => prev.filter((entry) => entry.key !== key));
+  const removeEntry = (key: string) => onEntriesChange((prev) => prev.filter((entry) => entry.key !== key));
 
   return (
     <div className="animate-in fade-in duration-300">
@@ -897,7 +899,7 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
         <div>
           <div className="text-sm font-bold text-gray-900">今日记录</div>
           <div className="text-[11px] text-gray-500">
-            {formatToday()}
+            {longDate(new Date(dateKey + 'T12:00:00'))}
             {entries.length ? ` · 已记 ${entries.length} 项` : ' · 还没有记录'}
           </div>
         </div>
@@ -905,9 +907,10 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
           {entries.length > 0 && (
             <button
               type="button"
+              disabled={saving}
               onClick={() => {
                 if (confirmClear) {
-                  setEntries([]);
+                  onEntriesChange(() => []);
                   setConfirmClear(false);
                 } else {
                   setConfirmClear(true);
@@ -925,6 +928,7 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
           )}
           <button
             type="button"
+            disabled={saving}
             onClick={() => setLibraryOpen(true)}
             className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-bold text-white shadow-sm transition hover:bg-brand-700"
           >
@@ -1041,6 +1045,7 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
       )}
 
       {/* 清单 */}
+      <fieldset disabled={saving} className="min-w-0">
       {entries.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
           <UtensilsCrossed className="mx-auto h-7 w-7 text-brand-400" />
@@ -1098,9 +1103,10 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
           })}
         </div>
       )}
+      </fieldset>
 
       <p className="mt-3 text-[10px] leading-relaxed text-gray-400">
-        食物库营养值为每 100 g 参考值，实际摄入以称重或份量估算为准；饮食记录与饮水只保存在本机浏览器，不会上传。
+        食物库营养值为每 100 g 参考值，实际摄入以称重或份量估算为准。食物记录随账号保存，饮水记录保存在此浏览器。
       </p>
 
       {waterSheet && (
@@ -1125,6 +1131,8 @@ export const DietLogPanel: React.FC<Props> = ({ profile }) => {
         onAdd={handleAdd}
         onRemove={handleRemove}
         addedGrams={addedGrams}
+        saving={saving}
+        saveMessage={saveMessage}
       />
     </div>
   );

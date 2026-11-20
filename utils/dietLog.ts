@@ -2,10 +2,9 @@
  * 饮食记录（今日记录）数据层
  * ------------------------------------------------------------------
  * 数据源：项目根目录 foods_library(1).json（1805 条标准食物库）
- * 存储：localStorage 单键 dmd_diet_foods_v1，按日期分桶，不落后端
+ * 食物记录随账号保存；保留旧版 localStorage 的读取入口用于手动导入。
  * 说明：记录条目会把「每 100g 营养」快照存进去，因此「今日记录」
  *      渲染时不依赖 1.4MB 食物库是否已加载。
- * 日期：todayKey() 取系统日期（本地时区）。
  */
 
 export interface FoodServing {
@@ -138,20 +137,6 @@ export const sumNutrients = (entries: DietLogEntry[]): FoodNutrients =>
     };
   }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sodium: 0, calcium: 0 });
 
-/** 「今天」的日期键（系统日期，本地时区） */
-export const todayKey = (): string => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-/** 「11 月 6 日 · 周五」形式的当前日期 */
-export const formatToday = (): string => {
-  const d = new Date();
-  const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
-  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 · ${week}`;
-};
-
 type LogStore = Record<string, DietLogEntry[]>;
 
 /**
@@ -207,19 +192,6 @@ export const readLogStore = (): LogStore => {
     return out;
   } catch {
     return {};
-  }
-};
-
-export const readEntries = (date: string): DietLogEntry[] => readLogStore()[date] || [];
-
-export const writeEntries = (date: string, entries: DietLogEntry[]): void => {
-  try {
-    const store = readLogStore();
-    if (entries.length) store[date] = entries;
-    else delete store[date];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-  } catch {
-    // 隐私模式 / 存储被禁用：退化为仅内存保存，不打断页面
   }
 };
 

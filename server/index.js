@@ -146,6 +146,7 @@ app.post('/api/email-push/visit', async (req, res) => {
 });
 
 registerShareRoutes(app, pool, authenticateToken);
+require('./dietRecords').registerDietRecordRoutes(app, pool, authenticateToken);
 const adminUserIds = new Set(
   String(process.env.ADMIN_USER_IDS || '')
     .split(',')

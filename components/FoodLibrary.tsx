@@ -102,9 +102,11 @@ interface Props {
   onRemove: (item: FoodItem) => void;
   /** foodId -> 今日已添加克数，用于「＋」键已选态 */
   addedGrams: Record<string, number>;
+  saving: boolean;
+  saveMessage: string;
 }
 
-export const FoodLibrary: React.FC<Props> = ({ open, onClose, onAdd, onRemove, addedGrams }) => {
+export const FoodLibrary: React.FC<Props> = ({ open, onClose, onAdd, onRemove, addedGrams, saving, saveMessage }) => {
   const [foods, setFoods] = useState<FoodItem[] | null>(foodCache);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,12 +205,13 @@ export const FoodLibrary: React.FC<Props> = ({ open, onClose, onAdd, onRemove, a
   const visible = list.slice(0, limit);
   /** 同一按键切换：未加入 → 加入；已加入 → 取消并删除该记录 */
   const toggle = (item: FoodItem) => {
+    if (saving) return;
     if (addedGrams[String(item.id)]) onRemove(item);
     else onAdd(item);
   };
   /** 整行点击只做「加入」；已加入时不再累加，避免误触删掉已调好的克数 */
   const addOnly = (item: FoodItem) => {
-    if (!addedGrams[String(item.id)]) onAdd(item);
+    if (!saving && !addedGrams[String(item.id)]) onAdd(item);
   };
 
   return (
@@ -255,6 +258,11 @@ export const FoodLibrary: React.FC<Props> = ({ open, onClose, onAdd, onRemove, a
           </div>
         </div>
 
+        {(saving || saveMessage) && (
+          <p role="status" className="bg-white px-4 py-2 text-sm text-gray-700">
+            {saving ? '正在保存饮食记录…' : saveMessage}
+          </p>
+        )}
         {/* 主体：左侧分类 + 右侧列表 */}
         <div className="flex min-h-0 flex-1">
           <aside className="w-[78px] flex-none overflow-y-auto border-r border-gray-100 bg-[#f2f4f2] sm:w-[96px]">
@@ -400,13 +408,14 @@ export const FoodLibrary: React.FC<Props> = ({ open, onClose, onAdd, onRemove, a
                       </div>
                       <button
                         type="button"
+                        disabled={saving}
                         aria-label={added > 0 ? `取消 ${item.name}` : `添加 ${item.name}`}
                         title={added > 0 ? '再点一次取消并删除该记录' : '加入今日记录'}
                         onClick={(event) => {
                           event.stopPropagation();
                           toggle(item);
                         }}
-                        className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-full border transition-all active:scale-90 ${
+                        className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-full border transition-all active:scale-90 disabled:opacity-50 ${
                           added > 0
                             ? 'border-brand-600 bg-brand-600 text-white shadow-sm hover:border-rose-500 hover:bg-rose-500'
                             : 'border-brand-200 bg-white text-brand-600 hover:bg-brand-50'

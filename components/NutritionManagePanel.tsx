@@ -13,10 +13,13 @@ import {
 } from '../utils/nutritionTrends';
 import type { BmiBands, DaySeries, TrendPoint } from '../utils/nutritionTrends';
 import type { DietProfile } from '../utils/dietTargets';
+import type { DietLogEntry } from '../utils/dietLog';
 
 interface Props {
   /** 「我的档案」里的年龄 / 身高 / 体重 / 激素与钙剂状态（全部可选） */
   profile?: DietProfile | null;
+  today: Date;
+  dietEntries: Record<string, DietLogEntry[]>;
 }
 
 const COLORS = {
@@ -352,7 +355,7 @@ const MiniBar: React.FC<MiniBarProps> = ({ title, icon: Icon, color, dataKey, we
 
 /* ============================== 主面板 ============================== */
 
-export const NutritionManagePanel: React.FC<Props> = ({ profile }) => {
+export const NutritionManagePanel: React.FC<Props> = ({ profile, today, dietEntries }) => {
   /** 补种子后自增一次，触发走势重算（否则首次进入看不到刚写入的点） */
   const [bodySeedTick, setBodySeedTick] = useState(0);
 
@@ -363,8 +366,8 @@ export const NutritionManagePanel: React.FC<Props> = ({ profile }) => {
   }, [profile?.heightCm, profile?.weightKg]);
 
   const { week, trend, targets, bands } = useMemo(
-    () => buildNutritionTrends(profile),
-    [profile, bodySeedTick]
+    () => buildNutritionTrends(profile, dietEntries, today),
+    [profile, dietEntries, today, bodySeedTick]
   );
 
   const bmiNow = trend.latest?.bmi;
