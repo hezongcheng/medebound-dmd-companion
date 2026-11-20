@@ -169,10 +169,21 @@ async function translateTrialFields(trial, existingZh) {
   return { titleZh, summaryZh, eligibilityZh };
 }
 
-async function fetchAndCacheTrials(pageSize = DEFAULT_PAGE_SIZE) {
+let trialsFetchInFlight;
+
+function fetchAndCacheTrials() {
+  if (!trialsFetchInFlight) {
+    trialsFetchInFlight = fetchTrialsFromRegistry().finally(() => {
+      trialsFetchInFlight = undefined;
+    });
+  }
+  return trialsFetchInFlight;
+}
+
+async function fetchTrialsFromRegistry() {
   const query = encodeURIComponent('Duchenne Muscular Dystrophy');
-  const statusFilter = 'RECRUITING|ENROLLING_BY_INVITATION|ACTIVE_NOT_RECRUITING';
-  const url = `${CLINICAL_TRIALS_BASE_URL}?query.cond=${query}&filter.overallStatus=${statusFilter}&pageSize=${pageSize}`;
+  const statusFilter = 'RECRUITING,ENROLLING_BY_INVITATION,ACTIVE_NOT_RECRUITING';
+  const url = `${CLINICAL_TRIALS_BASE_URL}?query.cond=${query}&filter.overallStatus=${statusFilter}&pageSize=${DEFAULT_PAGE_SIZE}&sort=LastUpdatePostDate:desc`;
 
   console.log('=== 开始抓取并缓存临床试验 ===');
   const response = await axios.get(url, { timeout: 20000 });

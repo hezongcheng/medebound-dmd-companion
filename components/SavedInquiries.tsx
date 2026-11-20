@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { SavedInquiry, InquiryType } from '../types';
 import { MessageSquare, Calendar, ChevronRight, ChevronDown, FileText, FlaskConical, Pill } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { InterpretationShare } from './InterpretationShare';
 
 interface Props {
     inquiries: SavedInquiry[];
@@ -83,11 +84,13 @@ export const SavedInquiries: React.FC<Props> = ({ inquiries }) => {
             ) : (
                 filteredInquiries.map((inquiry) => (
                     <div key={inquiry.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <button 
+                      <div className="flex items-center">
+                        <button type="button"
+                            aria-expanded={expandedId === inquiry.id}
                             onClick={() => setExpandedId(expandedId === inquiry.id ? null : inquiry.id)}
-                            className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors text-left"
+                            className="min-w-0 flex-1 flex items-center justify-between p-5 hover:bg-gray-50 transition-colors text-left"
                         >
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                     {inquiry.type === 'trial' && <FlaskConical className="w-4 h-4 text-purple-500" />}
                                     {inquiry.type === 'drug' && <Pill className="w-4 h-4 text-green-500" />}
@@ -105,6 +108,13 @@ export const SavedInquiries: React.FC<Props> = ({ inquiries }) => {
                             </div>
                             {expandedId === inquiry.id ? <ChevronDown className="text-gray-400" /> : <ChevronRight className="text-gray-400" />}
                         </button>
+                        {(inquiry.type ?? 'article') === 'article' && inquiry.articleId && (
+                            <div className="shrink-0 pr-3">
+                                <InterpretationShare kind="article" sourceId={inquiry.articleId}
+                                    title={translateText(inquiry.articleTitle)} label={t('ui.saved.consultation.share')} />
+                            </div>
+                        )}
+                      </div>
                         
                         {expandedId === inquiry.id && (
                             <div className="border-t border-gray-100 bg-gray-50 p-6 space-y-6">

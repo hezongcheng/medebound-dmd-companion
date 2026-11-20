@@ -586,7 +586,12 @@ app.get('/api/user/data', authenticateToken, async (req, res) => {
       steroidMedication: profiles[0].steroid_medication || undefined,
       mutationType: profiles[0].mutation_type || undefined,
       exonStart: profiles[0].exon_start == null ? undefined : Number(profiles[0].exon_start),
-      exonEnd: profiles[0].exon_end == null ? undefined : Number(profiles[0].exon_end)
+      exonEnd: profiles[0].exon_end == null ? undefined : Number(profiles[0].exon_end),
+      heightCm: profiles[0].height_cm == null ? undefined : Number(profiles[0].height_cm),
+      weightKg: profiles[0].weight_kg == null ? undefined : Number(profiles[0].weight_kg),
+      rehabTraining: profiles[0].rehab_training || undefined,
+      calciumSupplement: profiles[0].calcium_supplement || undefined,
+      calciumDoseMg: profiles[0].calcium_dose_mg == null ? undefined : Number(profiles[0].calcium_dose_mg)
     } : null;
     
     const savedInquiries = inquiries.map(i => ({
@@ -660,6 +665,11 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
           mutation_type = ?,
           exon_start = ?,
           exon_end = ?,
+          height_cm = ?,
+          weight_kg = ?,
+          rehab_training = ?,
+          calcium_supplement = ?,
+          calcium_dose_mg = ?,
           content_preference = ?,
           updated_at = NOW()
         WHERE user_id = ?`,
@@ -685,6 +695,11 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
           profile.mutationType || null,
           profile.exonStart == null ? null : Number(profile.exonStart),
           profile.exonEnd == null ? null : Number(profile.exonEnd),
+          profile.heightCm == null ? null : Number(profile.heightCm),
+          profile.weightKg == null ? null : Number(profile.weightKg),
+          profile.rehabTraining || null,
+          profile.calciumSupplement || null,
+          profile.calciumDoseMg == null ? null : Number(profile.calciumDoseMg),
           profile.contentPreference,
           userId
         ]
@@ -693,8 +708,8 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
       // 创建新档案
       await connection.execute(
         `INSERT INTO user_profiles 
-          (user_id, is_configured, age, birth_date, genetic_profile, ambulatory_status, on_steroids, region, clinical_notes, literature_push_enabled, has_joint_pain, joint_pain_details, has_joint_contracture, joint_contracture_details, province, mobility_stage, respiratory_support, ejection_fraction, steroid_status, steroid_medication, mutation_type, exon_start, exon_end, content_preference)
-        VALUES (?, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
+          (user_id, is_configured, age, birth_date, genetic_profile, ambulatory_status, on_steroids, region, clinical_notes, literature_push_enabled, has_joint_pain, joint_pain_details, has_joint_contracture, joint_contracture_details, province, mobility_stage, respiratory_support, ejection_fraction, steroid_status, steroid_medication, mutation_type, exon_start, exon_end, height_cm, weight_kg, rehab_training, calcium_supplement, calcium_dose_mg, content_preference)
+        VALUES (?, TRUE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
         [
           userId,
           profile.age,
@@ -718,6 +733,11 @@ app.post('/api/user/profile', authenticateToken, async (req, res) => {
           profile.mutationType || null,
           profile.exonStart == null ? null : Number(profile.exonStart),
           profile.exonEnd == null ? null : Number(profile.exonEnd),
+          profile.heightCm == null ? null : Number(profile.heightCm),
+          profile.weightKg == null ? null : Number(profile.weightKg),
+          profile.rehabTraining || null,
+          profile.calciumSupplement || null,
+          profile.calciumDoseMg == null ? null : Number(profile.calciumDoseMg),
           profile.contentPreference
         ]
       );
@@ -1039,6 +1059,7 @@ const { fetchAndCacheArticles, getLatestCachedArticle, getAllCachedArticles, get
 const trialCacheService = require('./trialCacheService');
 const drugCacheService = require('./drugCacheService');
 const { fetchAndCacheTrials, fetchAndCacheTrialByNct } = require('./trialFetchService');
+const TRIAL_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const { getUserFetchedTrials, getUserFetchedTrialsCount, getRandomUserFetchedTrials } = require('./trialCacheService');
 
 // 手动触发邮件推送接口（用于测试）
@@ -1302,14 +1323,13 @@ app.get('/api/trials', async (req, res) => {
   try {
     const region = (req.query.region || '').trim();
     const refresh = String(req.query.refresh || '').toLowerCase();
-    if (refresh === '1' || refresh === 'true') {
-      await fetchAndCacheTrials();
-    }
-
     let trials = await trialCacheService.getAllCachedTrials(region);
 
-    // 首次空缓存时自动回源抓取并翻译入库
-    if (!trials || trials.length === 0) {
+    // 地区没有匹配试验时，只有全局缓存为空才回源。
+    const refreshRequested = refresh === '1' || refresh === 'true';
+    const cacheEmpty = !trials?.length &&
+      (!region || !(await trialCacheService.getAllCachedTrials()).length);
+    if (refreshRequested || cacheEmpty) {
       await fetchAndCacheTrials();
       trials = await trialCacheService.getAllCachedTrials(region);
     }
@@ -1728,6 +1748,12 @@ app.listen(PORT, async () => {
   await runMigrations();
   await ensureShareTable(pool);
   startArticleDrugBackfill();
+
+  const refreshTrials = () => {
+    fetchAndCacheTrials().catch(error => console.error('自动抓取临床试验失败:', error.message));
+  };
+  refreshTrials();
+  setInterval(refreshTrials, TRIAL_REFRESH_INTERVAL_MS).unref();
   
   // 启动定时推送任务
   initScheduler();

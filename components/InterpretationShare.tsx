@@ -1,15 +1,22 @@
 import { t, translateText, contentText, getLocale } from '../i18n/runtime';
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { Share2, X } from 'lucide-react';
 import { apiPost } from '../services/apiClient';
 
-export function InterpretationShare({ title, sourceId, kind, disabled }: { title: string; sourceId: string; kind: 'article' | 'drug' | 'trial'; disabled: boolean }) {
+export function InterpretationShare({ title, sourceId, kind, disabled = false, label }: {
+  title: string;
+  sourceId: string;
+  kind: 'article' | 'drug' | 'trial';
+  disabled?: boolean;
+  label?: string;
+}) {
   const [publicContent, setPublicContent] = useState({ title: '', summary: '' });
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [url, setUrl] = useState('');
   const [message, setMessage] = useState('');
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const textId = useId();
   const plainSummary = publicContent.summary
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
@@ -51,14 +58,16 @@ export function InterpretationShare({ title, sourceId, kind, disabled }: { title
     }
   };
   return <>
-    <button aria-label={t("ui.share.analysis")} disabled={disabled} onClick={() => setOpen(true)} className="p-2 text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-40"><Share2 className="w-5 h-5" /></button>
+    <button type="button" aria-label={label || t("ui.share.analysis")} disabled={disabled} onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 whitespace-nowrap p-2 text-sm text-brand-700 rounded-lg hover:bg-brand-50 disabled:opacity-40">
+      <Share2 aria-hidden="true" className="w-5 h-5" />{label}
+    </button>
     {open && <div role="dialog" aria-modal="true" aria-label={t("ui.share.analysis")} className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-3">
       <div className="bg-white rounded-2xl p-4 w-full max-w-lg max-h-[95dvh] overflow-y-auto text-gray-800">
         <div className="flex justify-between mb-3"><h3 className="font-bold">{t("ui.share.ai.analysis")}</h3><button aria-label={t("ui.close.share.dialog")} onClick={() => setOpen(false)}><X /></button></div>
         <p className="text-sm text-gray-500 mb-3">{t("ui.only.public.information.and.a.link.are.shared.your")}</p>
         {url ? <>
-          <label htmlFor="interpretation-share-text" className="text-sm font-medium">{t("ui.share.content")}</label>
-          <textarea id="interpretation-share-text" ref={textRef} readOnly value={shareText} onFocus={e => e.target.select()} className="mt-2 w-full h-72 border rounded-xl p-4 text-sm leading-relaxed" />
+          <label htmlFor={textId} className="text-sm font-medium">{t("ui.share.content")}</label>
+          <textarea id={textId} ref={textRef} readOnly value={shareText} onFocus={e => e.target.select()} className="mt-2 w-full h-72 border rounded-xl p-4 text-sm leading-relaxed" />
         </> : <div className="bg-gray-50 p-4 border rounded-xl whitespace-pre-wrap break-words text-sm leading-relaxed">
           <h4 className="font-bold mb-3">{translateText(title)}</h4>{t("ui.share.content.will.be.generated.from.this.item.s")}</div>}
         <div className="flex flex-wrap gap-3 mt-4">

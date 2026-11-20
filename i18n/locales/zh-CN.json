@@ -692,5 +692,22 @@
   "rehab.error.stopped": "学习已终止，请重新开始",
   "rehab.error.offline": "视频已下线",
   "rehab.error.full": "学习时长不足，请继续播放",
-  "rehab.error.service": "学习服务暂时不可用，请重试"
+  "rehab.error.service": "学习服务暂时不可用，请重试",
+  "ui.diet": "饮食",
+  "ui.body.measurements": "身高与体重",
+  "ui.height": "身高",
+  "ui.weight": "体重",
+  "ui.body.measurements.hint": "用于按体重换算蛋白质、能量等每日目标，可随时修改。",
+  "ui.rehab.training": "康复训练",
+  "ui.rehab.training.on": "规律做康复训练",
+  "ui.rehab.training.off": "目前没有做",
+  "ui.calcium.supplement": "钙补充剂",
+  "ui.calcium.supplement.on": "正在服用钙补充剂",
+  "ui.calcium.supplement.off": "没有服用",
+  "ui.calcium.dose": "每日剂量（元素钙）",
+  "ui.calcium.dose.hint": "按包装标注的元素钙含量填写；不清楚时按医生处方剂量填。",
+  "ui.unsure": "不清楚",
+  "ui.unit.mg.per.day": "mg/日",
+  "ui.article.analysis.load.error": "文献解读加载失败，请重试。",
+  "ui.saved.consultation.share": "转发"
 }

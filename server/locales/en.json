@@ -692,5 +692,22 @@
   "rehab.error.stopped": "This session has ended. Please start again",
   "rehab.error.offline": "This video is no longer available",
   "rehab.error.full": "Please keep watching to reach the required time",
-  "rehab.error.service": "The learning service is temporarily unavailable. Please retry"
+  "rehab.error.service": "The learning service is temporarily unavailable. Please retry",
+  "ui.diet": "Diet",
+  "ui.body.measurements": "Height and weight",
+  "ui.height": "Height",
+  "ui.weight": "Weight",
+  "ui.body.measurements.hint": "Used to convert body weight into daily protein and energy targets. You can change it at any time.",
+  "ui.rehab.training": "Rehabilitation training",
+  "ui.rehab.training.on": "Doing it regularly",
+  "ui.rehab.training.off": "Not doing it now",
+  "ui.calcium.supplement": "Calcium supplement",
+  "ui.calcium.supplement.on": "Currently taking calcium",
+  "ui.calcium.supplement.off": "Not taking calcium",
+  "ui.calcium.dose": "Daily dose (elemental calcium)",
+  "ui.calcium.dose.hint": "Enter the elemental calcium amount on the label; if unsure, use the prescribed dose.",
+  "ui.unsure": "Not sure",
+  "ui.unit.mg.per.day": "mg/day",
+  "ui.article.analysis.load.error": "Could not load the article analysis. Please try again.",
+  "ui.saved.consultation.share": "Share"
 }

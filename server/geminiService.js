@@ -86,12 +86,13 @@ function delay(ms) {
 /**
  * 调用 Gemini API (单次)
  */
-function callGeminiAPIOnce(contents) {
+function callGeminiAPIOnce(contents, generationConfig) {
     return new Promise(function(resolve, reject) {
         var url = GEMINI_API_URL + '?key=' + API_KEY;
         
         var requestBody = JSON.stringify({
-            contents: contents
+            contents: contents,
+            generationConfig: generationConfig
         });
         
         var urlObj = new URL(url);
@@ -143,7 +144,7 @@ function callGeminiAPIOnce(contents) {
                     }
                     if (json.candidates && json.candidates[0] && json.candidates[0].content) {
                         var text = json.candidates[0].content.parts
-                            .map(function(p) { return p.text || ''; })
+                            .map(function(p) { return p.thought ? '' : (p.text || ''); })
                             .join('');
                         resolve(text);
                     } else {
@@ -171,7 +172,7 @@ function callGeminiAPIOnce(contents) {
 /**
  * 调用 Gemini API (带重试)
  */
-async function callGeminiAPI(contents) {
+async function callGeminiAPI(contents, generationConfig) {
     if (getRequestLocale() === 'en') {
         contents = contents.map((entry, index) => index !== contents.length - 1 ? entry : {
             ...entry, parts: [...entry.parts, { text: '\nOUTPUT LANGUAGE: Write all human-readable explanations, headings, questions and JSON string values in English. This overrides any instruction above requesting Chinese. Preserve all JSON field names, enum codes and verbatim source quotes. Do not change clinical evidence, thresholds, uncertainty or conclusions.' }]
@@ -181,7 +182,7 @@ async function callGeminiAPI(contents) {
     
     for (var attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
-            return await callGeminiAPIOnce(contents);
+            return await callGeminiAPIOnce(contents, generationConfig);
         } catch (error) {
             lastError = error;
             var errorMsg = error.message || '';
@@ -232,16 +233,25 @@ function parseArticleParts(answer, keys) {
     return parts;
 }
 
+async function generateArticleParts(prompt, keys) {
+    const contents = [{ parts: [{ text: prompt }] }];
+    const generationConfig = { responseMimeType: 'application/json' };
+    const answer = await callGeminiAPI(contents, generationConfig);
+    try {
+        return parseArticleParts(answer, keys);
+    } catch {
+        return parseArticleParts(await callGeminiAPI(contents, generationConfig), keys);
+    }
+}
+
 async function analyzeArticlePublic(article) {
     var cleanArticle = getCleanArticleForPrompt(article);
-    var answer = await callGeminiAPI([{ parts: [{ text: buildArticlePublicPrompt(cleanArticle) }] }]);
-    return parseArticleParts(answer, ['quickConclusion', 'detailedReading']);
+    return generateArticleParts(buildArticlePublicPrompt(cleanArticle), ['quickConclusion', 'detailedReading']);
 }
 
 async function analyzeArticlePersonal(article, profile, publicParts) {
     var cleanArticle = getCleanArticleForPrompt(article);
-    var answer = await callGeminiAPI([{ parts: [{ text: buildArticlePersonalPrompt(cleanArticle, profile, publicParts) }] }]);
-    return parseArticleParts(answer, ['personalizedMeaning', 'familyTakeaway']);
+    return generateArticleParts(buildArticlePersonalPrompt(cleanArticle, profile, publicParts), ['personalizedMeaning', 'familyTakeaway']);
 }
 
 var chatWithArticle = async function(history, newMessage, article, profile) {

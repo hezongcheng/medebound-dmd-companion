@@ -17,11 +17,12 @@ import { fetchDmdTrials, fetchTrialByNctFromServer, getUserFetchedTrials, getUse
 import { fetchDmdDrugs } from './services/fdaService';
 import { logout, getCurrentUser, getUserData, saveUserProfile, isAuthenticated, checkPhoneStatus, getLocalRehabRecords, getLocalRehabStatusHistory } from './services/authService';
 import { UserProfile, Article, UserDatabaseEntry, InterestArea, ClinicalTrial, FDADrug } from './types';
-import { Calendar, Loader2, Sparkles, LayoutGrid, UserRound, ChevronLeft, ChevronRight, Star, Microscope, Pill, CheckCircle2, AlertCircle, Search, Accessibility, RefreshCw, Eye } from 'lucide-react';
+import { Calendar, Loader2, Sparkles, LayoutGrid, UserRound, ChevronLeft, ChevronRight, Star, Microscope, Pill, Utensils, CheckCircle2, AlertCircle, Search, Accessibility, RefreshCw, Eye } from 'lucide-react';
 import { computeRelevance } from './utils/computeRelevance';
+import { recordBodyMetric } from './utils/nutritionTrends';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-type ViewState = 'rehab' | 'feed' | 'trials' | 'drugs' | 'settings' | 'saved' | 'me' | 'security';
+type ViewState = 'rehab' | 'feed' | 'trials' | 'drugs' | 'diet' | 'settings' | 'saved' | 'me' | 'security';
 type FeedTab = 'latest' | 'targeted';
 type DoiFetchNotice = { type: 'success' | 'error'; text: string } | null;
 type TrialTab = 'list' | 'targeted';
@@ -85,6 +86,7 @@ const VIEW_PATHS: Record<ViewState, string> = {
   feed: '/feed',
   trials: '/trials',
   drugs: '/drugs',
+  diet: '/diet',
   me: '/me',
   settings: '/settings',
   security: '/security',
@@ -93,6 +95,9 @@ const VIEW_PATHS: Record<ViewState, string> = {
 
 const LazyRehabSection = lazy(() =>
   import('./components/RehabSection').then((module) => ({ default: module.RehabSection }))
+);
+const LazyDietSection = lazy(() =>
+  import('./components/DietSection').then((module) => ({ default: module.DietSection }))
 );
 const LazySavedInquiries = lazy(() =>
   import('./components/SavedInquiries').then((module) => ({ default: module.SavedInquiries }))
@@ -976,6 +981,8 @@ const App: React.FC = () => {
       if (refreshedData) {
         setUserData(refreshedData);
       }
+      // 营养管理的走势横轴 = 档案保存时间：身高/体重有变化才记一个点（同日多次保存只留最后一条）
+      recordBodyMetric(refreshedData?.profile ?? profile);
       navigateToView('rehab', true);
   };
 
@@ -1329,6 +1336,13 @@ const App: React.FC = () => {
                     <Pill className="w-4 h-4 sm:mr-2" />
                     <span className="hidden sm:inline">{t("ui.drugs")}</span>
                  </button>
+                 <button aria-label={t('ui.diet')}
+                    onClick={() => navigateToView('diet')}
+                    className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all ${currentView === 'diet' ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                 >
+                    <Utensils className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">{t("ui.diet")}</span>
+                 </button>
                  <button aria-label={t('ui.my')}
                     onClick={() => navigateToView('me')}
                     className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all ${isMeSection ? 'bg-white text-brand-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -1354,6 +1368,13 @@ const App: React.FC = () => {
                   if (refreshedData) setUserData(refreshedData);
                 }} 
               />
+            </Suspense>
+        )}
+
+        {/* VIEW: DIET（饮食与营养） */}
+        {currentView === 'diet' && (
+            <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-brand-500 animate-spin" /></div>}>
+              <LazyDietSection userData={userData} />
             </Suspense>
         )}
 

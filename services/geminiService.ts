@@ -35,30 +35,24 @@ const readJsonSafely = async <T>(response: Response): Promise<T | null> => {
     }
 };
 
-export const analyzeArticle = async (article: Article, profile: UserProfile): Promise<string> => {
-    try {
-        const response = await fetch(`${API_BASE}/api/ai/analyze`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getAuthHeader()
-            },
-            body: JSON.stringify({ article, profile })
-        });
-        
-        if (checkTokenExpired(response)) return "登录已过期，请重新登录。";
-        
-        if (!response.ok) {
-            const error = await readJsonSafely<{ error?: string }>(response);
-            return error?.error || "服务暂时不可用，请稍后再试。";
-        }
-        
-        const data = await readJsonSafely<{ text?: string }>(response);
-        return data?.text || "抱歉，暂时无法生成摘要。";
-    } catch (error) {
-        console.error("AI解读错误:", error);
-        return "服务暂时不可用，请稍后再试。错误: " + (error as Error).message;
+export const analyzeArticle = async (article: Article, profile: UserProfile, signal?: AbortSignal): Promise<string> => {
+    const response = await fetch(`${API_BASE}/api/ai/analyze`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeader()
+        },
+        body: JSON.stringify({ article, profile }),
+        signal
+    });
+
+    if (checkTokenExpired(response)) throw new Error('登录已过期，请重新登录。');
+
+    const data = await readJsonSafely<{ text?: string; error?: string }>(response);
+    if (!response.ok || typeof data?.text !== 'string' || !data.text.trim()) {
+        throw new Error(data?.error || '暂时无法生成文献解读，请重试。');
     }
+    return data.text;
 };
 
 export const chatWithArticle = async (

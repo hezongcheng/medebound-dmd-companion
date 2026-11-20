@@ -110,11 +110,62 @@ const ChoiceMark = ({ selected }: { selected: boolean }) => (
   </span>
 );
 
+type TriValue = 'yes' | 'no' | 'unsure';
+
+interface TriChoiceProps {
+  value?: TriValue;
+  onChange: (value: TriValue) => void;
+  options: Array<{ value: TriValue; label: string }>;
+}
+
+/** 三选一（是 / 否 / 不清楚）：一行三格，选中态用左侧对勾 + 底色，窄屏自动换行不出框 */
+const TriChoice: React.FC<TriChoiceProps> = ({ value, onChange, options }) => (
+  <div className="grid grid-cols-3 gap-2">
+    {options.map(option => {
+      const selected = value === option.value;
+      return (
+        <button
+          type="button"
+          key={option.value}
+          aria-pressed={selected}
+          onClick={() => onChange(option.value)}
+          className={`flex min-h-16 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-center text-[11px] font-semibold leading-tight transition sm:text-sm ${selected ? 'border-teal-600 bg-teal-50/60 text-teal-800 shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300'}`}
+        >
+          {selected && <CheckCircle className="h-3.5 w-3.5 flex-none text-teal-600 sm:h-4 sm:w-4" />}
+          <span className="min-w-0 break-words">{translateText(option.label)}</span>
+        </button>
+      );
+    })}
+  </div>
+);
+
 export const ProfileForm: React.FC<Props> = ({ initialData, onSave, onLogout, isInitialSetup = false }) => {
   const [formData, setFormData] = useState<Partial<UserProfile>>(() => getInitialFormData(initialData));
 
   const [today, setToday] = useState(businessToday());
   const [formError, setFormError] = useState('');
+  // 身高/体重/钙剂量用字符串草稿承接输入，空串即「未填写」，避免数字输入的退格与小数点被打断
+  const [sizeInput, setSizeInput] = useState<{ height: string; weight: string }>(() => ({
+    height: initialData?.heightCm == null ? '' : String(initialData.heightCm),
+    weight: initialData?.weightKg == null ? '' : String(initialData.weightKg)
+  }));
+  const [doseInput, setDoseInput] = useState<string>(() =>
+    initialData?.calciumDoseMg == null ? '' : String(initialData.calciumDoseMg)
+  );
+
+  const commitSize = (field: 'height' | 'weight', raw: string) => {
+    setSizeInput(prev => ({ ...prev, [field]: raw }));
+    const value = raw.trim() === '' ? undefined : Number(raw);
+    const next = value != null && Number.isFinite(value) ? value : undefined;
+    setFormData(prev => ({ ...prev, [field === 'height' ? 'heightCm' : 'weightKg']: next }));
+  };
+
+  const commitDose = (raw: string) => {
+    setDoseInput(raw);
+    const value = raw.trim() === '' ? undefined : Number(raw);
+    const next = value != null && Number.isFinite(value) ? value : undefined;
+    setFormData(prev => ({ ...prev, calciumDoseMg: next }));
+  };
   useEffect(() => {
     const refresh = () => setToday(businessToday());
     const timer = window.setInterval(refresh, 60000);
@@ -155,6 +206,11 @@ export const ProfileForm: React.FC<Props> = ({ initialData, onSave, onLogout, is
 
   const handleSubmit = async () => {
     if (!canSubmit || !formData.mobilityStage || !formData.steroidStatus || !formData.mutationType) return;
+
+    if (formData.calciumSupplement === 'yes' && !(typeof formData.calciumDoseMg === 'number' && formData.calciumDoseMg >= 100)) {
+      setFormError('正在服用钙补充剂时，请填写每日剂量（元素钙，至少 100 mg/日）');
+      return;
+    }
 
     const mutationDescription = ['deletion', 'duplication'].includes(formData.mutationType) && formData.exonStart && formData.exonEnd
       ? `外显子 ${formData.exonStart}-${formData.exonEnd} ${formData.mutationType === 'duplication' ? '重复' : '缺失'}`
@@ -221,6 +277,49 @@ export const ProfileForm: React.FC<Props> = ({ initialData, onSave, onLogout, is
           <SectionTitle number={2}>{t("ui.clinical.overview")}</SectionTitle>
           <div className="space-y-6">
             <div>
+              <p className="mb-2 text-sm font-semibold text-slate-800">{t("ui.body.measurements")}</p>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-slate-600">{t("ui.height")}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={80}
+                      max={220}
+                      step={0.5}
+                      value={sizeInput.height}
+                      onChange={event => commitSize('height', event.target.value)}
+                      placeholder="—"
+                      aria-label={t("ui.height")}
+                      className="h-12 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    />
+                    <span className="flex-none text-sm text-slate-500">cm</span>
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-slate-600">{t("ui.weight")}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={10}
+                      max={150}
+                      step={0.5}
+                      value={sizeInput.weight}
+                      onChange={event => commitSize('weight', event.target.value)}
+                      placeholder="—"
+                      aria-label={t("ui.weight")}
+                      className="h-12 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-base text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                    />
+                    <span className="flex-none text-sm text-slate-500">kg</span>
+                  </div>
+                </label>
+              </div>
+              <p className="mt-1.5 text-xs text-slate-500">{t("ui.body.measurements.hint")}</p>
+            </div>
+
+            <div>
               <p className="mb-2 text-sm font-semibold text-slate-800">{t("ui.mobility.stage")}</p>
               <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                 {mobilityOptions.map(option => {
@@ -241,6 +340,19 @@ export const ProfileForm: React.FC<Props> = ({ initialData, onSave, onLogout, is
                   );
                 })}
               </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-800">{t("ui.rehab.training")}</p>
+              <TriChoice
+                value={formData.rehabTraining}
+                onChange={rehabTraining => setFormData(prev => ({ ...prev, rehabTraining }))}
+                options={[
+                  { value: 'yes', label: t("ui.rehab.training.on") },
+                  { value: 'no', label: t("ui.rehab.training.off") },
+                  { value: 'unsure', label: t("ui.unsure") }
+                ]}
+              />
             </div>
 
             <div>
@@ -346,6 +458,49 @@ export const ProfileForm: React.FC<Props> = ({ initialData, onSave, onLogout, is
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-semibold text-slate-800">{t("ui.calcium.supplement")}</p>
+              <TriChoice
+                value={formData.calciumSupplement}
+                onChange={calciumSupplement => {
+                  if (calciumSupplement !== 'yes') setDoseInput('');
+                  setFormData(prev => ({
+                    ...prev,
+                    calciumSupplement,
+                    calciumDoseMg: calciumSupplement === 'yes' ? prev.calciumDoseMg : undefined
+                  }));
+                }}
+                options={[
+                  { value: 'yes', label: t("ui.calcium.supplement.on") },
+                  { value: 'no', label: t("ui.calcium.supplement.off") },
+                  { value: 'unsure', label: t("ui.unsure") }
+                ]}
+              />
+              {formData.calciumSupplement === 'yes' && (
+                <div className="mt-3 rounded-xl border border-teal-200 bg-teal-50/50 p-3 sm:p-4">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold text-slate-700">{t("ui.calcium.dose")}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={100}
+                        max={3000}
+                        step={50}
+                        value={doseInput}
+                        onChange={event => commitDose(event.target.value)}
+                        placeholder="600"
+                        aria-label={t("ui.calcium.dose")}
+                        className="h-11 w-32 rounded-lg border border-slate-200 bg-white px-3 text-base font-semibold text-slate-900 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                      />
+                      <span className="text-sm text-slate-600">{t("ui.unit.mg.per.day")}</span>
+                    </div>
+                    <p className="mt-1.5 text-xs text-slate-500">{t("ui.calcium.dose.hint")}</p>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
         </section>

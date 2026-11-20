@@ -20,6 +20,8 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose,
   const locale = getLocale();
   const [summary, setSummary] = useState<string>('');
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [summaryError, setSummaryError] = useState(false);
+  const [summaryAttempt, setSummaryAttempt] = useState(0);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -54,35 +56,39 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose,
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    const init = async () => {
-      setLoadingSummary(true);
-      const [analysisResult] = await Promise.all([
-        analyzeArticle(article, profile),
-        fetchArticleContent()
-      ]);
-      if (isMounted) {
-        setSummary(analysisResult);
-        setLoadingSummary(false);
-      }
-    };
-    init();
-    return () => { isMounted = false; };
-  }, [article, profile, locale]);
+    const controller = new AbortController();
+    setLoadingSummary(true);
+    setSummary('');
+    setSummaryError(false);
+    analyzeArticle(article, profile, controller.signal)
+      .then(result => {
+        if (!controller.signal.aborted) setSummary(result);
+      })
+      .catch(error => {
+        if (controller.signal.aborted) return;
+        console.error('AI解读错误:', error);
+        setSummaryError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingSummary(false);
+      });
+    return () => controller.abort();
+  }, [article, profile, locale, summaryAttempt]);
 
-  const fetchArticleContent = async () => {
-    try {
-      setLoadingContent(true);
-      const data = await apiGet<{ content: string }>(`/api/articles/${article.id}/content`);
-      if (data) {
-        setOriginalContent(data.content || '');
-      }
-    } catch (error) {
-      console.error('获取原文内容失败:', error);
-    } finally {
-      setLoadingContent(false);
-    }
-  };
+  useEffect(() => {
+    let active = true;
+    setLoadingContent(true);
+    setOriginalContent('');
+    apiGet<{ content: string }>(`/api/articles/${article.id}/content`)
+      .then(data => {
+        if (active) setOriginalContent(data?.content || '');
+      })
+      .catch(error => console.error('获取原文内容失败:', error))
+      .finally(() => {
+        if (active) setLoadingContent(false);
+      });
+    return () => { active = false; };
+  }, [article.id, locale]);
 
   useEffect(() => {
     if (chatHistory.length === 0 && !chatLoading) return;
@@ -109,7 +115,7 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose,
     fetchQuestions();
     return () => { isMounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingSummary, locale]);
+  }, [article, profile, loadingSummary, locale, summary]);
 
   const handleSend = async () => {
     if (!input.trim() || chatLoading) return;
@@ -146,7 +152,7 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose,
   };
 
   const handleToggleFavorite = async () => {
-      if (saving || loadingSummary) return;
+      if (saving || (!existingInquiry && (loadingSummary || !summary))) return;
       setSaving(true);
       try {
           if (existingInquiry) {
@@ -188,7 +194,7 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose,
             <button
                 type="button"
                 onClick={handleToggleFavorite}
-                disabled={loadingSummary || saving}
+                disabled={saving || (!existingInquiry && (loadingSummary || !summary))}
                 aria-label={translateText(favorited ? '取消收藏' : '收藏')}
                 aria-pressed={favorited}
                 title={translateText(favorited ? '取消收藏' : '收藏')}
@@ -282,6 +288,14 @@ export const AIInterpreterModal: React.FC<Props> = ({ article, profile, onClose,
                       <div className="h-4 bg-gray-200 rounded w-5/6"></div>
                       <div className="h-32 bg-gray-200 rounded w-full mt-6"></div>
                       <p className="text-center text-gray-400 text-sm mt-4">{t("ui.ai.is.reading.and.preparing.your.personalized.analysis")}</p>
+                    </div>
+                  ) : summaryError ? (
+                    <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-800">
+                      <p role="alert">{t('ui.article.analysis.load.error')}</p>
+                      <button type="button" onClick={() => setSummaryAttempt(attempt => attempt + 1)}
+                        className="mt-3 rounded-lg border border-red-200 bg-white px-3 py-1.5 font-medium">
+                        {t('ui.retry')}
+                      </button>
                     </div>
                   ) : (
                     <div className="bg-gray-50/50 rounded-xl p-5 border border-gray-100">

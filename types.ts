@@ -46,6 +46,16 @@ export interface UserProfile {
   mutationType?: 'deletion' | 'duplication' | 'nonsense' | 'splice_site' | 'indel' | 'missense' | 'other' | 'unsure';
   exonStart?: number;
   exonEnd?: number;
+  /** 身高（厘米），临床概况里的身体测量 */
+  heightCm?: number;
+  /** 体重（千克），用于按 kg 换算蛋白质/能量目标 */
+  weightKg?: number;
+  /** 是否规律做康复训练 */
+  rehabTraining?: 'yes' | 'no' | 'unsure';
+  /** 是否服用钙补充剂 */
+  calciumSupplement?: 'yes' | 'no' | 'unsure';
+  /** 钙补充剂每日元素钙剂量（mg/日），仅「正在服用」时有值 */
+  calciumDoseMg?: number;
 }
 
 export interface Article {
